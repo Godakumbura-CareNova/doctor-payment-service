@@ -38,6 +38,10 @@ ScaffoldingReadMe.txt
 
 # dotenv environment variables file
 .env
+appsettings.Local.json
+
+# Visual Studio workspace
+.vs/
 
 # Others
 ~$*
