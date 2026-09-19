@@ -1,9 +1,7 @@
 name: Doctor Payment CD
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   docker:
