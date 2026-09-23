@@ -71,6 +71,7 @@ builder.Services.AddScoped<IDoctorSearchRepository, DoctorSearchRepository>();
 builder.Services.AddScoped<IDoctorSearchService, DoctorSearchService>();
 
 builder.Services.AddScoped<IValidator<CreateAvailabilityRequestDto>, CreateAvailabilityValidator>();
+builder.Services.AddScoped<IValidator<UpdateAvailabilitySlotRequestDto>, UpdateAvailabilitySlotValidator>();
 builder.Services.AddScoped<IDoctorAvailabilityRepository, DoctorAvailabilityRepository>();
 builder.Services.AddScoped<IDoctorAvailabilityService, DoctorAvailabilityService>();
 

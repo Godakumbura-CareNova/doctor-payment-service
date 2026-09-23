@@ -43,16 +43,10 @@ public class DoctorAvailabilityService : IDoctorAvailabilityService
         var start = AsUtc(request.StartUtc);
         var end = AsUtc(request.EndUtc);
 
-        if (start <= now) throw new ArgumentException("Availability must start in the future.", nameof(request));
-        if (start > now.AddDays(MaxDaysAhead)) throw new ArgumentException($"Availability can be published at most {MaxDaysAhead} days ahead.", nameof(request));
+        EnsureWithinBookingHorizon(start, now);
 
         var overlapping = await _repository.GetOverlappingSlotsAsync(profileId, start, end, cancellationToken);
-        if (overlapping.Count > 0)
-        {
-            var first = overlapping[0];
-            throw new AvailabilityConflictException(
-                $"This window overlaps an existing slot ({first.StartUtc:yyyy-MM-dd HH:mm} to {first.EndUtc:HH:mm} UTC). Remove it first or choose another time.");
-        }
+        if (overlapping.Count > 0) throw OverlapConflict(overlapping[0]);
 
         var newSlots = BuildSlots(profileId, start, end, TimeSpan.FromMinutes(request.SlotDurationMinutes));
         if (newSlots.Count == 0) throw new ArgumentException("The window is shorter than one slot.", nameof(request));
@@ -71,6 +65,30 @@ public class DoctorAvailabilityService : IDoctorAvailabilityService
         return newSlots.Select(ToResponse).ToList();
     }
 
+    public async Task<AvailabilitySlotResponseDto?> UpdateAsync(Guid doctorId, int slotId, UpdateAvailabilitySlotRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var profileId = await _repository.GetProfileIdAsync(doctorId, cancellationToken);
+        if (profileId is null) return null;
+
+        var slot = await _repository.GetSlotAsync(profileId.Value, slotId, cancellationToken);
+        if (slot is null) return null;
+        if (slot.IsBooked) throw new AvailabilityConflictException("A patient has already booked this slot, so it cannot be changed.");
+
+        var start = AsUtc(request.StartUtc);
+        var end = AsUtc(request.EndUtc);
+        EnsureWithinBookingHorizon(start, Now());
+
+        // The slot being edited always overlaps its own old time, so only other slots count as conflicts.
+        var overlapping = await _repository.GetOverlappingSlotsAsync(profileId.Value, start, end, cancellationToken);
+        var conflict = overlapping.FirstOrDefault(other => other.Id != slot.Id);
+        if (conflict is not null) throw OverlapConflict(conflict);
+
+        slot.StartUtc = start;
+        slot.EndUtc = end;
+        await _repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(slot);
+    }
+
     public async Task<bool> DeleteAsync(Guid doctorId, int slotId, CancellationToken cancellationToken = default)
     {
         var profileId = await _repository.GetProfileIdAsync(doctorId, cancellationToken);
@@ -86,6 +104,15 @@ public class DoctorAvailabilityService : IDoctorAvailabilityService
     }
 
     private DateTime Now() => _timeProvider.GetUtcNow().UtcDateTime;
+
+    private static void EnsureWithinBookingHorizon(DateTime start, DateTime now)
+    {
+        if (start <= now) throw new ArgumentException("Availability must start in the future.", "request");
+        if (start > now.AddDays(MaxDaysAhead)) throw new ArgumentException($"Availability can be published at most {MaxDaysAhead} days ahead.", "request");
+    }
+
+    private static AvailabilityConflictException OverlapConflict(DoctorAvailabilitySlot existing) => new(
+        $"This time overlaps an existing slot ({existing.StartUtc:yyyy-MM-dd HH:mm} to {existing.EndUtc:HH:mm} UTC). Edit or remove that slot first, or choose another time.");
 
     // JSON without a zone suffix deserialises as Unspecified; treat that as UTC rather than the server's local zone.
     private static DateTime AsUtc(DateTime value) => value.Kind switch
