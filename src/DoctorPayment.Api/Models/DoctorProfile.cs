@@ -29,6 +29,21 @@ public class DoctorProfile
     [MaxLength(2000)]
     public string? Biography { get; set; }
 
+    /// <summary>
+    /// Where the doctor's picture lives on the user-auth service, e.g. "/uploads/profile-pictures/abc.jpg".
+    /// Snapshotted when the doctor saves their profile, the same way <see cref="FullName"/> is, so patients
+    /// can see the picture without this service calling user-auth. Only the path is stored; the browser
+    /// resolves it against the user-auth host.
+    /// </summary>
+    [MaxLength(200)]
+    public string? ProfilePicturePath { get; set; }
+
+    /// <summary>
+    /// Fee for one consultation, in the platform currency (LKR). Null until the doctor sets one;
+    /// patients then see "not specified" rather than a zero.
+    /// </summary>
+    public decimal? ConsultationFee { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
 
     public DateTime UpdatedAtUtc { get; set; }

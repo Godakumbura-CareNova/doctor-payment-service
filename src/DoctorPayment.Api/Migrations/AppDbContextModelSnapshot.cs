@@ -128,6 +128,10 @@ namespace DoctorPayment.Api.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
 
+                    b.Property<decimal?>("ConsultationFee")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime(6)");
 
@@ -136,6 +140,10 @@ namespace DoctorPayment.Api.Migrations
 
                     b.Property<string>("FullName")
                         .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("ProfilePicturePath")
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 

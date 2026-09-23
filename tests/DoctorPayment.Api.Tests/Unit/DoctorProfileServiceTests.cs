@@ -36,6 +36,64 @@ public sealed class DoctorProfileServiceTests
     }
 
     [Fact]
+    public async Task SaveAsync_StoresTheConsultationFee_RoundedToCents()
+    {
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext);
+        var request = ValidRequest();
+        request.ConsultationFee = 2500.499m;
+
+        var saved = await service.SaveAsync(Guid.NewGuid(), DoctorName, request);
+
+        Assert.Equal(2500.50m, saved.ConsultationFee);
+        Assert.Equal(2500.50m, (await dbContext.DoctorProfiles.SingleAsync()).ConsultationFee);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ClearsTheConsultationFee_WhenOmitted()
+    {
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext);
+        var doctorId = Guid.NewGuid();
+        var withFee = ValidRequest();
+        withFee.ConsultationFee = 3000m;
+        await service.SaveAsync(doctorId, DoctorName, withFee);
+
+        var saved = await service.SaveAsync(doctorId, DoctorName, ValidRequest());
+
+        Assert.Null(saved.ConsultationFee);
+    }
+
+    [Fact]
+    public async Task SaveAsync_StoresOnlyThePathOfAnAbsolutePictureUrl()
+    {
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext);
+        var request = ValidRequest();
+        request.ProfilePicturePath = "https://auth.example.com/uploads/profile-pictures/nimal.jpg";
+
+        var saved = await service.SaveAsync(Guid.NewGuid(), DoctorName, request);
+
+        Assert.Equal("/uploads/profile-pictures/nimal.jpg", saved.ProfilePicturePath);
+        Assert.Equal("/uploads/profile-pictures/nimal.jpg", (await dbContext.DoctorProfiles.SingleAsync()).ProfilePicturePath);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ClearsThePicturePath_WhenOmitted()
+    {
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext);
+        var doctorId = Guid.NewGuid();
+        var withPicture = ValidRequest();
+        withPicture.ProfilePicturePath = "/uploads/profile-pictures/nimal.jpg";
+        await service.SaveAsync(doctorId, DoctorName, withPicture);
+
+        var saved = await service.SaveAsync(doctorId, DoctorName, ValidRequest());
+
+        Assert.Null(saved.ProfilePicturePath);
+    }
+
+    [Fact]
     public async Task GetByDoctorIdAsync_ReturnsNull_WhenNoProfileExists()
     {
         await using var dbContext = CreateDbContext();

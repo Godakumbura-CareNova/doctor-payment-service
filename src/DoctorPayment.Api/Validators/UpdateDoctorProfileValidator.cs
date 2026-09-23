@@ -7,6 +7,13 @@ public class UpdateDoctorProfileValidator : AbstractValidator<UpdateDoctorProfil
 {
     public const int MinYear = 1950;
     public const int MaxEntries = 20;
+    public const decimal MaxConsultationFee = 1_000_000m;
+
+    /// <summary>
+    /// The picture path comes from the client, so only the user-auth profile-picture location is accepted:
+    /// a bare path, or an absolute URL whose path matches. Anything else could point a patient's browser anywhere.
+    /// </summary>
+    public const string ProfilePicturePathPattern = @"^(https?://[^/]+)?/uploads/profile-pictures/[A-Za-z0-9._-]{1,100}$";
 
     public UpdateDoctorProfileValidator()
     {
@@ -22,6 +29,26 @@ public class UpdateDoctorProfileValidator : AbstractValidator<UpdateDoctorProfil
 
         RuleFor(profile => profile.Biography)
             .MaximumLength(2000).WithMessage("Biography must not exceed 2000 characters.");
+
+        When(profile => !string.IsNullOrWhiteSpace(profile.ProfilePicturePath), () =>
+        {
+            RuleFor(profile => profile.ProfilePicturePath!.Trim())
+                .MaximumLength(300).WithMessage("Profile picture path must not exceed 300 characters.")
+                .Matches(ProfilePicturePathPattern)
+                .WithMessage("Profile picture path must point at a user-auth profile picture.")
+                .OverridePropertyName(nameof(UpdateDoctorProfileRequestDto.ProfilePicturePath));
+        });
+
+        // The fee is optional (null = not set yet); when given it must be a sensible amount in whole cents.
+        When(profile => profile.ConsultationFee.HasValue, () =>
+        {
+            RuleFor(profile => profile.ConsultationFee!.Value)
+                .InclusiveBetween(0m, MaxConsultationFee)
+                .WithMessage($"Consultation fee must be between 0 and {MaxConsultationFee:N0}.")
+                .Must(fee => decimal.Round(fee, 2) == fee)
+                .WithMessage("Consultation fee can have at most 2 decimal places.")
+                .OverridePropertyName(nameof(UpdateDoctorProfileRequestDto.ConsultationFee));
+        });
 
         RuleFor(profile => profile.Qualifications)
             .NotNull().WithMessage("Qualifications must be provided.")

@@ -51,6 +51,58 @@ public sealed class UpdateDoctorProfileValidatorTests
         _validator.TestValidate(request).ShouldHaveValidationErrorFor(r => r.RegistrationNumber);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0.0)]
+    [InlineData(2500.0)]
+    [InlineData(1999.99)]
+    [InlineData(1_000_000.0)]
+    public void ConsultationFee_IsOptional_AndAcceptsSensibleAmounts(double? fee)
+    {
+        var request = ValidRequest();
+        request.ConsultationFee = fee.HasValue ? (decimal)fee.Value : null;
+
+        _validator.TestValidate(request).ShouldNotHaveValidationErrorFor(r => r.ConsultationFee);
+    }
+
+    [Theory]
+    [InlineData(-1.0)]
+    [InlineData(1_000_000.01)]
+    [InlineData(1500.005)]
+    public void ConsultationFee_RejectsNegativeOversizedOrFractionalCents(double fee)
+    {
+        var request = ValidRequest();
+        request.ConsultationFee = (decimal)fee;
+
+        _validator.TestValidate(request).ShouldHaveValidationErrorFor(r => r.ConsultationFee);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("/uploads/profile-pictures/abc-123.jpg")]
+    [InlineData("https://carenova-auth.example.com/uploads/profile-pictures/abc-123.jpg")]
+    public void ProfilePicturePath_IsOptional_AndAcceptsUserAuthPictureLocations(string? path)
+    {
+        var request = ValidRequest();
+        request.ProfilePicturePath = path;
+
+        _validator.TestValidate(request).ShouldNotHaveValidationErrorFor(r => r.ProfilePicturePath);
+    }
+
+    [Theory]
+    [InlineData("https://evil.example.com/tracker.gif")]
+    [InlineData("/uploads/profile-pictures/../../appsettings.json")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("/uploads/other/abc.jpg")]
+    public void ProfilePicturePath_RejectsAnythingOutsideThatLocation(string path)
+    {
+        var request = ValidRequest();
+        request.ProfilePicturePath = path;
+
+        _validator.TestValidate(request).ShouldHaveValidationErrorFor(r => r.ProfilePicturePath);
+    }
+
     [Fact]
     public void BiographyOverLimit_Fails()
     {

@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using DoctorPayment.Api.Data;
+using DoctorPayment.Api.DTOs.DoctorAvailability;
 using DoctorPayment.Api.DTOs.DoctorProfile;
 using DoctorPayment.Api.DTOs.DoctorSearch;
 using DoctorPayment.Api.Models;
@@ -185,6 +186,115 @@ public sealed class DoctorSearchEndpointTests : IClassFixture<DoctorSearchEndpoi
         Assert.Equal("Tharindu Bandara", hit.FullName);
         Assert.Equal("Psychiatrist", hit.Specialization);
         Assert.False(hit.Availability.HasAvailableSlots);
+    }
+
+    [Fact]
+    public async Task DoctorSettingAFee_ShowsItOnTheirPublicProfileAndInSearch()
+    {
+        var doctorId = Guid.NewGuid();
+        var doctorClient = _factory.ClientFor("Doctor", doctorId, "Sanduni Weerasinghe");
+        var request = new UpdateDoctorProfileRequestDto
+        {
+            Specialization = "Endocrinologist",
+            RegistrationNumber = "SLMC-88001",
+            ConsultationFee = 3500.50m
+        };
+
+        var save = await doctorClient.PutAsJsonAsync("/api/doctors/me/profile", request);
+        Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        var mine = await save.Content.ReadFromJsonAsync<DoctorProfileResponseDto>(Json);
+        Assert.Equal(3500.50m, mine!.ConsultationFee);
+
+        var patient = _factory.PatientClient();
+        var profile = await patient.GetFromJsonAsync<DoctorPublicProfileDto>($"/api/doctors/{doctorId}", Json);
+        Assert.Equal(3500.50m, profile!.ConsultationFee);
+
+        var search = await patient.GetFromJsonAsync<DoctorSearchResultDto>("/api/doctors?search=Sanduni", Json);
+        Assert.Equal(3500.50m, Assert.Single(search!.Items, item => item.DoctorId == doctorId).ConsultationFee);
+    }
+
+    [Fact]
+    public async Task InvalidFee_IsRejectedWithAFieldError()
+    {
+        var doctorClient = _factory.ClientFor("Doctor", Guid.NewGuid(), "Dr Negative");
+        var request = new UpdateDoctorProfileRequestDto { Specialization = "GP", RegistrationNumber = "SLMC-1", ConsultationFee = -5m };
+
+        var response = await doctorClient.PutAsJsonAsync("/api/doctors/me/profile", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.GetProperty("errors").TryGetProperty("ConsultationFee", out _));
+    }
+
+    [Fact]
+    public async Task Availability_IsForbidden_ForPatients_AndRequiresAuth()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync("/api/doctors/me/availability")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _factory.PatientClient().GetAsync("/api/doctors/me/availability")).StatusCode);
+    }
+
+    [Fact]
+    public async Task AddingAvailability_WithoutAProfile_IsAConflict()
+    {
+        var doctorClient = _factory.ClientFor("Doctor", Guid.NewGuid(), "Dr NoProfile");
+        var start = DateTime.UtcNow.AddDays(2).Date.AddHours(9);
+
+        var response = await doctorClient.PostAsJsonAsync("/api/doctors/me/availability", new CreateAvailabilityRequestDto { StartUtc = start, EndUtc = start.AddHours(1), SlotDurationMinutes = 20 });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Contains("professional profile", body.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task DoctorPublishingAvailability_IsVisibleToPatients_UntilWithdrawn()
+    {
+        var doctorId = Guid.NewGuid();
+        var doctorClient = _factory.ClientFor("Doctor", doctorId, "Chathura Gunasekara");
+        var patient = _factory.PatientClient();
+        await doctorClient.PutAsJsonAsync("/api/doctors/me/profile", new UpdateDoctorProfileRequestDto { Specialization = "Urologist", RegistrationNumber = "SLMC-99001" });
+        var start = DateTime.UtcNow.AddDays(3).Date.AddHours(14);
+
+        // Publish a one-hour window as three 20-minute slots.
+        var add = await doctorClient.PostAsJsonAsync("/api/doctors/me/availability", new CreateAvailabilityRequestDto { StartUtc = start, EndUtc = start.AddHours(1), SlotDurationMinutes = 20 });
+        Assert.Equal(HttpStatusCode.Created, add.StatusCode);
+        var created = await add.Content.ReadFromJsonAsync<List<AvailabilitySlotResponseDto>>(Json);
+        Assert.Equal(3, created!.Count);
+
+        var mine = await doctorClient.GetFromJsonAsync<List<AvailabilitySlotResponseDto>>("/api/doctors/me/availability", Json);
+        Assert.Equal(3, mine!.Count);
+
+        // Overlapping window is refused.
+        var overlap = await doctorClient.PostAsJsonAsync("/api/doctors/me/availability", new CreateAvailabilityRequestDto { StartUtc = start.AddMinutes(30), EndUtc = start.AddMinutes(90), SlotDurationMinutes = 20 });
+        Assert.Equal(HttpStatusCode.Conflict, overlap.StatusCode);
+
+        // Patients see the open slots and the doctor as available.
+        var profile = await patient.GetFromJsonAsync<DoctorPublicProfileDto>($"/api/doctors/{doctorId}", Json);
+        Assert.True(profile!.Availability.HasAvailableSlots);
+        Assert.Equal(3, profile.Availability.AvailableSlotCount);
+        Assert.Equal(created.Select(slot => slot.StartUtc), profile.UpcomingSlots.Select(slot => slot.StartUtc));
+
+        // Withdraw one slot; the others remain.
+        var delete = await doctorClient.DeleteAsync($"/api/doctors/me/availability/{created[0].Id}");
+        Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await doctorClient.DeleteAsync($"/api/doctors/me/availability/{created[0].Id}")).StatusCode);
+
+        profile = await patient.GetFromJsonAsync<DoctorPublicProfileDto>($"/api/doctors/{doctorId}", Json);
+        Assert.Equal(2, profile!.Availability.AvailableSlotCount);
+    }
+
+    [Fact]
+    public async Task ADoctorCannotDeleteAnotherDoctorsSlot()
+    {
+        var ownerId = await _factory.SeedDoctorAsync("Owner Doctor", "Oncologist", openSlots: 1);
+        var owner = _factory.ClientFor("Doctor", ownerId, "Owner Doctor");
+        var slot = Assert.Single((await owner.GetFromJsonAsync<List<AvailabilitySlotResponseDto>>("/api/doctors/me/availability", Json))!);
+        var intruder = _factory.ClientFor("Doctor", Guid.NewGuid(), "Other Doctor");
+
+        var response = await intruder.DeleteAsync($"/api/doctors/me/availability/{slot.Id}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Single((await owner.GetFromJsonAsync<List<AvailabilitySlotResponseDto>>("/api/doctors/me/availability", Json))!);
     }
 
     public sealed class DoctorSearchApiFactory : WebApplicationFactory<Program>

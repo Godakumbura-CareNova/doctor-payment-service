@@ -15,6 +15,12 @@ public class DoctorPublicProfileDto
 
     public string? Biography { get; set; }
 
+    /// <summary>Path of the doctor's picture on the user-auth service; null when they have not uploaded one.</summary>
+    public string? ProfilePicturePath { get; set; }
+
+    /// <summary>Consultation fee in LKR; null when the doctor has not set one.</summary>
+    public decimal? ConsultationFee { get; set; }
+
     public List<QualificationResponseDto> Qualifications { get; set; } = new();
 
     public List<ExperienceResponseDto> Experiences { get; set; } = new();

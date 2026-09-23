@@ -59,6 +59,7 @@ Request body for `PUT`:
   "specialization": "General Practitioner",
   "registrationNumber": "SLMC-12345",
   "biography": "Optional, up to 2000 characters.",
+  "consultationFee": 2500.00,
   "qualifications": [
     { "degree": "MBBS", "institution": "University of Colombo", "startYear": 2010, "endYear": 2015 }
   ],
@@ -75,6 +76,41 @@ Validation failures return `400` with `{ "message": "...", "errors": { "Field": 
 where nested keys look like `Qualifications[0].Degree`. A `null` end year means
 "Present" (in progress / still current). `otherDetails` is an optional section
 for memberships, awards, publications, training and similar; it may be empty.
+`consultationFee` is optional (omit or `null` = not set); when given it must be
+0–1,000,000 with at most two decimals and is stored in LKR. Patients see it on
+the public profile and in search results (GCN-35).
+
+`profilePicturePath` is optional and records **which** user-auth picture belongs
+to this doctor, e.g. `/uploads/profile-pictures/abc.jpg`. The picture itself is
+uploaded to and served by the user-auth service as a static file; this service
+stores only the path (a snapshot, like `fullName`) so patients can find it
+without this service calling user-auth. An absolute URL is reduced to its path,
+and anything outside `/uploads/profile-pictures/` is rejected with `400`, since
+the value comes from the client. No endpoint here serves image bytes.
+
+### Doctor availability (GCN-37)
+
+Doctors publish the consultation slots patients see on their public profile.
+A window is split into consecutive slots of `slotDurationMinutes`; any remainder
+shorter than one slot is dropped.
+
+| Method | Route                                    | Auth          | Description                                                                 |
+| ------ | ---------------------------------------- | ------------- | --------------------------------------------------------------------------- |
+| GET    | `/api/doctors/me/availability`           | `Doctor` role | Upcoming slots (booked included), soonest first. `[]` when none/no profile. |
+| POST   | `/api/doctors/me/availability`           | `Doctor` role | Adds a window; returns `201` with the slots created.                        |
+| DELETE | `/api/doctors/me/availability/{slotId}`  | `Doctor` role | Removes an open slot (`204`); `404` if unknown/not yours, `409` if booked.  |
+
+Request body for `POST` (times are UTC; a value without a zone suffix is treated as UTC):
+
+```json
+{ "startUtc": "2026-10-01T09:00:00Z", "endUtc": "2026-10-01T11:00:00Z", "slotDurationMinutes": 20 }
+```
+
+Rules: end after start, window at most 12 hours, slot length 10–240 minutes and
+no longer than the window (`400` with `{ message, errors }`); start must be in
+the future and at most 90 days ahead (`400`); the window must not overlap
+existing slots and a doctor may hold at most 200 open upcoming slots (`409`);
+the doctor must have a professional profile (`409`).
 
 ### Doctor search and public profile (GCN-34)
 
@@ -106,8 +142,9 @@ Doctors with open slots are listed first, then alphabetically. Invalid criteria
 return `400` with the same `{ message, errors }` shape as the profile endpoints.
 
 Availability is read from the `DoctorAvailabilitySlots` table (open = not
-booked and starts in the future). Managing slots belongs to the availability
-story; until then the table is populated directly.
+booked and starts in the future); doctors manage the rows through the
+availability endpoints below. Each item and the public profile also carry
+`consultationFee` (nullable).
 
 ## Tests
 
@@ -116,7 +153,7 @@ dotnet test DoctorPayment.sln
 ```
 
 Unit tests (`tests/DoctorPayment.Api.Tests/Unit`) cover the validators, services
-and controllers for the doctor profile and doctor search stories.
+and controllers for the doctor profile, doctor search and availability stories.
 `Integration/DoctorSearchEndpointTests` boots the API with JWT auth against an
-in-memory database and exercises the search flow end to end;
+in-memory database and exercises search, fee and availability end to end;
 `Integration/HealthEndpointTests` is the scaffold smoke test.

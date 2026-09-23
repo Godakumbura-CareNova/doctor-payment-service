@@ -35,6 +35,8 @@ public class DoctorProfileService : IDoctorProfileService
         profile.Specialization = Normalize(request.Specialization);
         profile.RegistrationNumber = Normalize(request.RegistrationNumber).ToUpperInvariant();
         profile.Biography = string.IsNullOrWhiteSpace(request.Biography) ? null : request.Biography.Trim();
+        profile.ConsultationFee = request.ConsultationFee is { } fee ? decimal.Round(fee, 2) : null;
+        profile.ProfilePicturePath = NormalizePicturePath(request.ProfilePicturePath);
         profile.UpdatedAtUtc = now;
 
         // The request carries the full lists, so the stored collections are replaced as a whole.
@@ -81,6 +83,15 @@ public class DoctorProfileService : IDoctorProfileService
 
     private static string Normalize(string? value) => (value ?? string.Empty).Trim();
 
+    // Only the path is kept: the browser resolves it against the user-auth host, so an absolute URL
+    // sent by the client is reduced to its path rather than trusted as-is.
+    private static string? NormalizePicturePath(string? value)
+    {
+        var text = Normalize(value);
+        if (text.Length == 0) return null;
+        return Uri.TryCreate(text, UriKind.Absolute, out var absolute) ? absolute.AbsolutePath : text;
+    }
+
     private static DoctorProfileResponseDto ToResponse(DoctorProfile profile) => new()
     {
         Id = profile.Id,
@@ -89,6 +100,8 @@ public class DoctorProfileService : IDoctorProfileService
         Specialization = profile.Specialization,
         RegistrationNumber = profile.RegistrationNumber,
         Biography = profile.Biography,
+        ConsultationFee = profile.ConsultationFee,
+        ProfilePicturePath = profile.ProfilePicturePath,
         CreatedAtUtc = profile.CreatedAtUtc,
         UpdatedAtUtc = profile.UpdatedAtUtc,
         Qualifications = profile.Qualifications

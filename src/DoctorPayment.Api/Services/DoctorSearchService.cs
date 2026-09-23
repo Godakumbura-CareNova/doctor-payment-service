@@ -62,6 +62,8 @@ public class DoctorSearchService : IDoctorSearchService
             Specialization = profile.Specialization,
             RegistrationNumber = profile.RegistrationNumber,
             Biography = profile.Biography,
+            ConsultationFee = profile.ConsultationFee,
+            ProfilePicturePath = profile.ProfilePicturePath,
             YearsOfExperience = YearsOfExperience(profile.Experiences.Select(item => (int?)item.StartYear).Min(), now.Year),
             UpdatedAtUtc = profile.UpdatedAtUtc,
             Qualifications = profile.Qualifications
@@ -125,6 +127,8 @@ public class DoctorSearchService : IDoctorSearchService
         Specialization = row.Profile.Specialization,
         RegistrationNumber = row.Profile.RegistrationNumber,
         Biography = row.Profile.Biography,
+        ConsultationFee = row.Profile.ConsultationFee,
+        ProfilePicturePath = row.Profile.ProfilePicturePath,
         Qualifications = row.Degrees,
         YearsOfExperience = YearsOfExperience(row.FirstExperienceYear, currentYear),
         Availability = new DoctorAvailabilityDto

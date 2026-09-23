@@ -177,6 +177,20 @@ public sealed class DoctorSearchServiceTests
         Assert.Equal(Now.Year - 2012, nimal.YearsOfExperience);
         Assert.Equal("SLMC-1001", nimal.RegistrationNumber);
         Assert.Equal("Heart specialist.", nimal.Biography);
+        Assert.Equal(4500m, nimal.ConsultationFee);
+        Assert.Equal("/uploads/profile-pictures/nimal.jpg", nimal.ProfilePicturePath);
+    }
+
+    [Fact]
+    public async Task SearchAsync_LeavesConsultationFeeNull_WhenTheDoctorHasNotSetOne()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var result = await service.SearchAsync(new DoctorSearchQueryDto { Search = "Kamala" });
+
+        Assert.Null(result.Items.Single().ConsultationFee);
     }
 
     [Fact]
@@ -219,6 +233,8 @@ public sealed class DoctorSearchServiceTests
         Assert.Equal(new[] { "MBBS", "MD Cardiology" }, profile.Qualifications.Select(q => q.Degree));
         Assert.Equal(new[] { "Medical Officer", "Consultant Cardiologist" }, profile.Experiences.Select(e => e.Position));
         Assert.Single(profile.OtherDetails);
+        Assert.Equal(4500m, profile.ConsultationFee);
+        Assert.Equal("/uploads/profile-pictures/nimal.jpg", profile.ProfilePicturePath);
         Assert.Equal(Now.Year - 2012, profile.YearsOfExperience);
         Assert.True(profile.Availability.HasAvailableSlots);
         Assert.Equal(2, profile.Availability.AvailableSlotCount);
@@ -272,6 +288,8 @@ public sealed class DoctorSearchServiceTests
             Specialization = "Cardiologist",
             RegistrationNumber = "SLMC-1001",
             Biography = "Heart specialist.",
+            ConsultationFee = 4500m,
+            ProfilePicturePath = "/uploads/profile-pictures/nimal.jpg",
             CreatedAtUtc = Now,
             UpdatedAtUtc = Now,
             Qualifications =

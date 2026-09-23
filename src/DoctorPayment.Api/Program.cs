@@ -1,6 +1,7 @@
 using System.Text;
 using DoctorPayment.Api.Config;
 using DoctorPayment.Api.Data;
+using DoctorPayment.Api.DTOs.DoctorAvailability;
 using DoctorPayment.Api.DTOs.DoctorProfile;
 using DoctorPayment.Api.DTOs.DoctorSearch;
 using DoctorPayment.Api.Repositories;
@@ -68,6 +69,10 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IValidator<DoctorSearchQueryDto>, DoctorSearchQueryValidator>();
 builder.Services.AddScoped<IDoctorSearchRepository, DoctorSearchRepository>();
 builder.Services.AddScoped<IDoctorSearchService, DoctorSearchService>();
+
+builder.Services.AddScoped<IValidator<CreateAvailabilityRequestDto>, CreateAvailabilityValidator>();
+builder.Services.AddScoped<IDoctorAvailabilityRepository, DoctorAvailabilityRepository>();
+builder.Services.AddScoped<IDoctorAvailabilityService, DoctorAvailabilityService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(

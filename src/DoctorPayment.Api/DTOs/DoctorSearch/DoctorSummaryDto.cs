@@ -13,6 +13,12 @@ public class DoctorSummaryDto
 
     public string? Biography { get; set; }
 
+    /// <summary>Path of the doctor's picture on the user-auth service; null when they have not uploaded one.</summary>
+    public string? ProfilePicturePath { get; set; }
+
+    /// <summary>Consultation fee in LKR; null when the doctor has not set one.</summary>
+    public decimal? ConsultationFee { get; set; }
+
     /// <summary>Degrees in the order they were earned, e.g. ["MBBS", "MD"].</summary>
     public List<string> Qualifications { get; set; } = new();
 

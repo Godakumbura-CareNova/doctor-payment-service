@@ -29,6 +29,10 @@ public class AppDbContext : DbContext
             .IsUnique();
 
         modelBuilder.Entity<DoctorProfile>()
+            .Property(profile => profile.ConsultationFee)
+            .HasPrecision(10, 2);
+
+        modelBuilder.Entity<DoctorProfile>()
             .HasMany(profile => profile.Qualifications)
             .WithOne(qualification => qualification.DoctorProfile)
             .HasForeignKey(qualification => qualification.DoctorProfileId)
