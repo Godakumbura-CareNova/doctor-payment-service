@@ -12,7 +12,10 @@ public class UpdateDoctorProfileRequestDto
     /// <summary>Path of the doctor's picture on the user-auth service; null when they have not uploaded one.</summary>
     public string? ProfilePicturePath { get; set; }
 
-    /// <summary>Consultation fee in LKR; null when the doctor has not set one.</summary>
+    /// <summary>
+    /// Ignored when saving: the fee only changes through an admin-approved fee-change request.
+    /// Kept so existing clients that resend the whole profile still validate.
+    /// </summary>
     public decimal? ConsultationFee { get; set; }
 
     public List<QualificationDto> Qualifications { get; set; } = new();

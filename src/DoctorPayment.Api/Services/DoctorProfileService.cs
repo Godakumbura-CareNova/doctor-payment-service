@@ -35,7 +35,8 @@ public class DoctorProfileService : IDoctorProfileService
         profile.Specialization = Normalize(request.Specialization);
         profile.RegistrationNumber = Normalize(request.RegistrationNumber).ToUpperInvariant();
         profile.Biography = string.IsNullOrWhiteSpace(request.Biography) ? null : request.Biography.Trim();
-        profile.ConsultationFee = request.ConsultationFee is { } fee ? decimal.Round(fee, 2) : null;
+        // The consultation fee is deliberately not taken from the request: it only changes when an admin
+        // approves a fee-change request (GCN-38), so a doctor cannot change it by saving the profile.
         profile.ProfilePicturePath = NormalizePicturePath(request.ProfilePicturePath);
         profile.UpdatedAtUtc = now;
 

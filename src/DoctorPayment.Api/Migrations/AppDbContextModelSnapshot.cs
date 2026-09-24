@@ -22,6 +22,58 @@ namespace DoctorPayment.Api.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("DoctorPayment.Api.Models.ConsultationFeeChangeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("CurrentFee")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<int>("DoctorProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PendingDoctorProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<decimal>("RequestedFee")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedByAdminId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PendingDoctorProfileId")
+                        .IsUnique();
+
+                    b.HasIndex("DoctorProfileId", "SubmittedAtUtc");
+
+                    b.HasIndex("Status", "SubmittedAtUtc");
+
+                    b.ToTable("ConsultationFeeChangeRequests");
+                });
+
             modelBuilder.Entity("DoctorPayment.Api.Models.DoctorAvailabilitySlot", b =>
                 {
                     b.Property<int>("Id")
@@ -81,6 +133,47 @@ namespace DoctorPayment.Api.Migrations
                     b.HasIndex("DoctorProfileId");
 
                     b.ToTable("DoctorExperiences");
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.DoctorNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("DoctorProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<int?>("RelatedEntityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RelatedEntityType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DoctorProfileId", "CreatedAtUtc");
+
+                    b.ToTable("DoctorNotifications");
                 });
 
             modelBuilder.Entity("DoctorPayment.Api.Models.DoctorOtherDetail", b =>
@@ -206,6 +299,17 @@ namespace DoctorPayment.Api.Migrations
                     b.ToTable("DoctorQualifications");
                 });
 
+            modelBuilder.Entity("DoctorPayment.Api.Models.ConsultationFeeChangeRequest", b =>
+                {
+                    b.HasOne("DoctorPayment.Api.Models.DoctorProfile", "DoctorProfile")
+                        .WithMany()
+                        .HasForeignKey("DoctorProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DoctorProfile");
+                });
+
             modelBuilder.Entity("DoctorPayment.Api.Models.DoctorAvailabilitySlot", b =>
                 {
                     b.HasOne("DoctorPayment.Api.Models.DoctorProfile", "DoctorProfile")
@@ -221,6 +325,17 @@ namespace DoctorPayment.Api.Migrations
                 {
                     b.HasOne("DoctorPayment.Api.Models.DoctorProfile", "DoctorProfile")
                         .WithMany("Experiences")
+                        .HasForeignKey("DoctorProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DoctorProfile");
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.DoctorNotification", b =>
+                {
+                    b.HasOne("DoctorPayment.Api.Models.DoctorProfile", "DoctorProfile")
+                        .WithMany()
                         .HasForeignKey("DoctorProfileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

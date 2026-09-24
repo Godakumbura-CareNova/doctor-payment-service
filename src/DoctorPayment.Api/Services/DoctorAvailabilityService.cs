@@ -49,7 +49,7 @@ public class DoctorAvailabilityService : IDoctorAvailabilityService
         if (overlapping.Count > 0) throw OverlapConflict(overlapping[0]);
 
         var newSlots = BuildSlots(profileId, start, end, TimeSpan.FromMinutes(request.SlotDurationMinutes));
-        if (newSlots.Count == 0) throw new ArgumentException("The window is shorter than one slot.", nameof(request));
+        if (newSlots.Count == 0) throw new ArgumentException("The window is shorter than one slot.");
 
         var existing = await _repository.GetUpcomingSlotsAsync(profileId, now, cancellationToken);
         var openCount = existing.Count(slot => !slot.IsBooked);
@@ -107,8 +107,8 @@ public class DoctorAvailabilityService : IDoctorAvailabilityService
 
     private static void EnsureWithinBookingHorizon(DateTime start, DateTime now)
     {
-        if (start <= now) throw new ArgumentException("Availability must start in the future.", "request");
-        if (start > now.AddDays(MaxDaysAhead)) throw new ArgumentException($"Availability can be published at most {MaxDaysAhead} days ahead.", "request");
+        if (start <= now) throw new ArgumentException("Availability must start in the future.");
+        if (start > now.AddDays(MaxDaysAhead)) throw new ArgumentException($"Availability can be published at most {MaxDaysAhead} days ahead.");
     }
 
     private static AvailabilityConflictException OverlapConflict(DoctorAvailabilitySlot existing) => new(

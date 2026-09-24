@@ -4,6 +4,7 @@ using DoctorPayment.Api.Data;
 using DoctorPayment.Api.DTOs.DoctorAvailability;
 using DoctorPayment.Api.DTOs.DoctorProfile;
 using DoctorPayment.Api.DTOs.DoctorSearch;
+using DoctorPayment.Api.DTOs.FeeChangeRequest;
 using DoctorPayment.Api.Repositories;
 using DoctorPayment.Api.Security;
 using DoctorPayment.Api.Services;
@@ -74,6 +75,13 @@ builder.Services.AddScoped<IValidator<CreateAvailabilityRequestDto>, CreateAvail
 builder.Services.AddScoped<IValidator<UpdateAvailabilitySlotRequestDto>, UpdateAvailabilitySlotValidator>();
 builder.Services.AddScoped<IDoctorAvailabilityRepository, DoctorAvailabilityRepository>();
 builder.Services.AddScoped<IDoctorAvailabilityService, DoctorAvailabilityService>();
+
+builder.Services.AddScoped<IValidator<CreateFeeChangeRequestDto>, CreateFeeChangeRequestValidator>();
+builder.Services.AddScoped<IValidator<RejectFeeChangeRequestDto>, RejectFeeChangeRequestValidator>();
+builder.Services.AddScoped<IFeeChangeRequestRepository, FeeChangeRequestRepository>();
+builder.Services.AddScoped<IFeeChangeRequestService, FeeChangeRequestService>();
+builder.Services.AddScoped<IDoctorNotificationRepository, DoctorNotificationRepository>();
+builder.Services.AddScoped<IDoctorNotificationService, DoctorNotificationService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(

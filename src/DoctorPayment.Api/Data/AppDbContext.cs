@@ -20,6 +20,10 @@ public class AppDbContext : DbContext
 
     public DbSet<DoctorAvailabilitySlot> DoctorAvailabilitySlots { get; set; }
 
+    public DbSet<ConsultationFeeChangeRequest> ConsultationFeeChangeRequests { get; set; }
+
+    public DbSet<DoctorNotification> DoctorNotifications { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -60,5 +64,29 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<DoctorProfile>().HasIndex(profile => profile.FullName);
         modelBuilder.Entity<DoctorProfile>().HasIndex(profile => profile.Specialization);
         modelBuilder.Entity<DoctorAvailabilitySlot>().HasIndex(slot => new { slot.DoctorProfileId, slot.StartUtc, slot.IsBooked });
+
+        modelBuilder.Entity<ConsultationFeeChangeRequest>(request =>
+        {
+            request.HasOne(item => item.DoctorProfile)
+                .WithMany()
+                .HasForeignKey(item => item.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            request.Property(item => item.CurrentFee).HasPrecision(10, 2);
+            request.Property(item => item.RequestedFee).HasPrecision(10, 2);
+            request.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
+            // At most one pending request per doctor; see PendingDoctorProfileId.
+            request.HasIndex(item => item.PendingDoctorProfileId).IsUnique();
+            request.HasIndex(item => new { item.DoctorProfileId, item.SubmittedAtUtc });
+            request.HasIndex(item => new { item.Status, item.SubmittedAtUtc });
+        });
+
+        modelBuilder.Entity<DoctorNotification>(notification =>
+        {
+            notification.HasOne(item => item.DoctorProfile)
+                .WithMany()
+                .HasForeignKey(item => item.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            notification.HasIndex(item => new { item.DoctorProfileId, item.CreatedAtUtc });
+        });
     }
 }
