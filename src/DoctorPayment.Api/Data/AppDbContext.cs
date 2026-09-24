@@ -24,6 +24,8 @@ public class AppDbContext : DbContext
 
     public DbSet<DoctorNotification> DoctorNotifications { get; set; }
 
+    public DbSet<MedicinePayment> MedicinePayments { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -87,6 +89,16 @@ public class AppDbContext : DbContext
                 .HasForeignKey(item => item.DoctorProfileId)
                 .OnDelete(DeleteBehavior.Cascade);
             notification.HasIndex(item => new { item.DoctorProfileId, item.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<MedicinePayment>(payment =>
+        {
+            payment.Property(item => item.Amount).HasPrecision(10, 2);
+            payment.Property(item => item.Method).HasConversion<string>().HasMaxLength(20);
+            payment.Property(item => item.Status).HasConversion<string>().HasMaxLength(30);
+            // One payment per pharmacy order; choosing again updates it.
+            payment.HasIndex(item => item.OrderId).IsUnique();
+            payment.HasIndex(item => item.PatientId);
         });
     }
 }

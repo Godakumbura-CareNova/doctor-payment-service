@@ -146,6 +146,45 @@ booked and starts in the future); doctors manage the rows through the
 availability endpoints below. Each item and the public profile also carry
 `consultationFee` (nullable).
 
+### Medicine order payment method
+
+At checkout, a patient chooses how to pay before placing a pharmacy order:
+online, bank transfer or cash. The frontend lists the methods for the cart total,
+places the order, then saves the method against the new order. The order itself lives in the pharmacy-order service; this
+service reads it with the patient's own token (so that service decides whether
+the order is theirs) and takes the amount from it, never from the client.
+
+| Method | Route                                           | Auth           | Description                                                      |
+| ------ | ----------------------------------------------- | -------------- | ---------------------------------------------------------------- |
+| GET    | `/api/medicine-payments/methods?amount=`         | `Patient` role | Methods for a checkout total, before the order exists (advisory; re-checked on `PUT`). |
+| GET    | `/api/medicine-orders/{orderId}/payment-options` | `Patient` role | Every method, marked available or not, plus any method chosen.   |
+| PUT    | `/api/medicine-orders/{orderId}/payment`         | `Patient` role | Chooses or changes the method; repeating the same choice is safe. |
+| GET    | `/api/medicine-orders/{orderId}/payment`         | `Patient` role | The chosen method, or `404` if none yet.                         |
+
+`PUT` takes `{ "method": "Online" | "BankTransfer" | "Cash" }` and returns the
+payment with a `nextStep`:
+
+| Method         | Status                  | `nextStep`                 | What the patient sees                               |
+| -------------- | ----------------------- | -------------------------- | --------------------------------------------------- |
+| `Online`       | `AwaitingOnlinePayment` | `OnlinePayment`            | The online payment page (gateway comes in a later story). |
+| `BankTransfer` | `AwaitingBankTransfer`  | `BankTransferInstructions` | Bank details (`bankTransfer`) and the receipt upload option. |
+| `Cash`         | `PayOnCollection`       | `PayOnCollection`          | Confirmation to pay at the counter; no online payment. |
+
+Errors: `400` no/unknown method; `404` order not found or not the patient's;
+`422` order rejected, collected or with inconsistent details; `409` method not
+available for this order (switched off, bank details missing, or cash above
+`CashMaxAmount`); `503` the pharmacy-order service could not be reached (the
+client offers a retry). All carry `{ "message": "..." }`.
+
+Configuration:
+
+| Key                                    | Meaning                                                                 |
+| -------------------------------------- | ----------------------------------------------------------------------- |
+| `PharmacyOrderService:BaseUrl`         | Pharmacy-order API including `/api` locally (`http://localhost:5134/api`); the gateway's `/pharmacy` in production. |
+| `MedicinePayments:EnabledMethods`      | Optional array of methods to offer; omit to offer all three.            |
+| `MedicinePayments:CashMaxAmount`       | Largest order total payable in cash (default `25000`).                   |
+| `MedicinePayments:BankTransfer:*`      | `BankName`, `Branch`, `AccountName`, `AccountNumber`. Bank transfer is shown as unavailable until these are set. Only sample values are committed (development); set the real account in Azure app settings, e.g. `MedicinePayments__BankTransfer__AccountNumber`. |
+
 ## Tests
 
 ```powershell
@@ -157,3 +196,5 @@ and controllers for the doctor profile, doctor search and availability stories.
 `Integration/DoctorSearchEndpointTests` boots the API with JWT auth against an
 in-memory database and exercises search, fee and availability end to end;
 `Integration/HealthEndpointTests` is the scaffold smoke test.
+`Unit/MedicinePaymentTests` covers choosing a payment method (each method,
+unavailable methods, invalid orders, order-service failures).

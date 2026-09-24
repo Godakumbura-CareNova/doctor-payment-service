@@ -1,10 +1,12 @@
 using System.Text;
+using DoctorPayment.Api.Clients;
 using DoctorPayment.Api.Config;
 using DoctorPayment.Api.Data;
 using DoctorPayment.Api.DTOs.DoctorAvailability;
 using DoctorPayment.Api.DTOs.DoctorProfile;
 using DoctorPayment.Api.DTOs.DoctorSearch;
 using DoctorPayment.Api.DTOs.FeeChangeRequest;
+using DoctorPayment.Api.DTOs.MedicinePayment;
 using DoctorPayment.Api.Repositories;
 using DoctorPayment.Api.Security;
 using DoctorPayment.Api.Services;
@@ -82,6 +84,19 @@ builder.Services.AddScoped<IFeeChangeRequestRepository, FeeChangeRequestReposito
 builder.Services.AddScoped<IFeeChangeRequestService, FeeChangeRequestService>();
 builder.Services.AddScoped<IDoctorNotificationRepository, DoctorNotificationRepository>();
 builder.Services.AddScoped<IDoctorNotificationService, DoctorNotificationService>();
+
+builder.Services.AddOptions<MedicinePaymentSettings>()
+    .Bind(builder.Configuration.GetSection("MedicinePayments"));
+builder.Services.AddHttpClient<IPharmacyOrderClient, PharmacyOrderClient>(client =>
+{
+    // Orders are read from the pharmacy-order service; a missing URL surfaces as "order cannot be loaded".
+    var baseUrl = builder.Configuration["PharmacyOrderService:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl)) client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddScoped<IValidator<SelectPaymentMethodRequestDto>, SelectPaymentMethodValidator>();
+builder.Services.AddScoped<IMedicinePaymentRepository, MedicinePaymentRepository>();
+builder.Services.AddScoped<IMedicinePaymentService, MedicinePaymentService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
