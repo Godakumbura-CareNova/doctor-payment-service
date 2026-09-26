@@ -26,6 +26,12 @@ public class AppDbContext : DbContext
 
     public DbSet<MedicinePayment> MedicinePayments { get; set; }
 
+    public DbSet<BankTransferReceipt> BankTransferReceipts { get; set; }
+
+    public DbSet<PaymentStaffNotification> PaymentStaffNotifications { get; set; }
+
+    public DbSet<EventOutbox> EventOutboxEntries { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -99,6 +105,34 @@ public class AppDbContext : DbContext
             // One payment per pharmacy order; choosing again updates it.
             payment.HasIndex(item => item.OrderId).IsUnique();
             payment.HasIndex(item => item.PatientId);
+            payment.HasMany(item => item.Receipts)
+                .WithOne(receipt => receipt.MedicinePayment)
+                .HasForeignKey(receipt => receipt.MedicinePaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BankTransferReceipt>(receipt =>
+        {
+            receipt.Property(item => item.Status).HasConversion<string>().HasMaxLength(30);
+            // At most one receipt waiting for verification per payment; see PendingPaymentId.
+            receipt.HasIndex(item => item.PendingPaymentId).IsUnique();
+            receipt.HasIndex(item => new { item.Status, item.UploadedAtUtc });
+            receipt.HasIndex(item => item.OrderId);
+        });
+
+        modelBuilder.Entity<PaymentStaffNotification>(notification =>
+        {
+            notification.HasIndex(item => item.EventId).IsUnique();
+            notification.HasIndex(item => item.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<EventOutbox>(entry =>
+        {
+            entry.HasIndex(item => item.EventId).IsUnique();
+            entry.Property(item => item.Topic).HasMaxLength(200);
+            entry.Property(item => item.EventType).HasMaxLength(100);
+            entry.Property(item => item.EventKey).HasMaxLength(100);
+            entry.HasIndex(item => new { item.PublishedAtUtc, item.PublishAttempts });
         });
     }
 }

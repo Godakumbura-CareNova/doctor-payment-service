@@ -18,7 +18,16 @@ public enum MedicinePaymentStatus
     AwaitingBankTransfer,
 
     /// <summary>Cash chosen; paid at the pharmacy counter when the order is collected. No online payment is started.</summary>
-    PayOnCollection
+    PayOnCollection,
+
+    /// <summary>A bank transfer receipt was uploaded and waits for staff. The order stays Pending and is not confirmed.</summary>
+    ReceiptUnderVerification,
+
+    /// <summary>Staff could not match the uploaded receipt; the patient can upload another.</summary>
+    ReceiptRejected,
+
+    /// <summary>Staff verified the bank transfer receipt; the payment is confirmed.</summary>
+    Paid
 }
 
 /// <summary>
@@ -47,4 +56,7 @@ public class MedicinePayment
     public DateTime CreatedAtUtc { get; set; }
 
     public DateTime UpdatedAtUtc { get; set; }
+
+    /// <summary>Bank transfer receipts uploaded for this payment, oldest first.</summary>
+    public List<BankTransferReceipt> Receipts { get; set; } = new();
 }

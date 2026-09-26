@@ -98,6 +98,17 @@ builder.Services.AddScoped<IValidator<SelectPaymentMethodRequestDto>, SelectPaym
 builder.Services.AddScoped<IMedicinePaymentRepository, MedicinePaymentRepository>();
 builder.Services.AddScoped<IMedicinePaymentService, MedicinePaymentService>();
 
+builder.Services.AddOptions<ReceiptStorageSettings>()
+    .Bind(builder.Configuration.GetSection("ReceiptStorage"));
+builder.Services.AddOptions<KafkaSettings>()
+    .Bind(builder.Configuration.GetSection("Kafka"));
+builder.Services.AddSingleton<IReceiptFileStorage, ReceiptFileStorage>();
+builder.Services.AddScoped<IBankTransferReceiptRepository, BankTransferReceiptRepository>();
+builder.Services.AddScoped<IBankTransferReceiptService, BankTransferReceiptService>();
+builder.Services.AddScoped<IKafkaEventProducer, KafkaEventProducer>();
+builder.Services.AddHostedService<OutboxPublisherService>();
+builder.Services.AddHostedService<KafkaConsumerService>();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("DefaultConnection"),

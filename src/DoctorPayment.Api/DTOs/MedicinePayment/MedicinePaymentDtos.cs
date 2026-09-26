@@ -72,7 +72,10 @@ public class MedicinePaymentResponseDto
     /// <summary>"Online", "BankTransfer" or "Cash".</summary>
     public string Method { get; set; } = string.Empty;
 
-    /// <summary>"AwaitingOnlinePayment", "AwaitingBankTransfer" or "PayOnCollection".</summary>
+    /// <summary>
+    /// "AwaitingOnlinePayment", "AwaitingBankTransfer", "PayOnCollection", or for bank transfer after a receipt upload
+    /// "ReceiptUnderVerification", "ReceiptRejected" or "Paid".
+    /// </summary>
     public string Status { get; set; } = string.Empty;
 
     /// <summary>"OnlinePayment", "BankTransferInstructions" or "PayOnCollection".</summary>
@@ -80,6 +83,9 @@ public class MedicinePaymentResponseDto
 
     /// <summary>Set only for bank transfer.</summary>
     public BankTransferInstructionsDto? BankTransfer { get; set; }
+
+    /// <summary>The latest bank transfer receipt uploaded for this payment; null when none has been uploaded.</summary>
+    public BankTransferReceiptDto? Receipt { get; set; }
 
     public DateTime UpdatedAtUtc { get; set; }
 }

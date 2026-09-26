@@ -59,3 +59,6 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Uploaded bank transfer receipts (GCN-40)
+src/DoctorPayment.Api/uploads/

@@ -176,6 +176,52 @@ available for this order (switched off, bank details missing, or cash above
 `CashMaxAmount`); `503` the pharmacy-order service could not be reached (the
 client offers a retry). All carry `{ "message": "..." }`.
 
+### Bank transfer receipt upload (GCN-40)
+
+After choosing bank transfer the patient uploads the transfer receipt. The
+pharmacy order **stays Pending**: uploading never confirms it. The payment
+waits for pharmacy staff, and only a staff verification marks it `Paid`.
+
+| Method | Route                                                   | Auth                 | Description |
+| ------ | ------------------------------------------------------- | -------------------- | ----------- |
+| POST   | `/api/medicine-orders/{orderId}/payment/receipt`         | `Patient` role       | Multipart form field `file`: JPG, JPEG or PNG, max 5 MB. Returns `{ message, orderStatus, payment }`. |
+| GET    | `/api/staff/bank-transfer-receipts?status=`              | `PharmacyStaff` role | `PendingVerification` (default), `Verified`, `Rejected` or `All`. |
+| GET    | `/api/staff/bank-transfer-receipts/{receiptId}/file`     | `PharmacyStaff` role | The receipt image. |
+| POST   | `/api/staff/bank-transfer-receipts/{receiptId}/verify`   | `PharmacyStaff` role | Receipt `Verified`, payment `Paid`. |
+| POST   | `/api/staff/bank-transfer-receipts/{receiptId}/reject`   | `PharmacyStaff` role | `{ "reason": "..." }`; payment `ReceiptRejected`, the patient can upload again. |
+| GET    | `/api/staff/payment-notifications`                       | `PharmacyStaff` role | Notifications created from the Kafka events. |
+| PUT    | `/api/staff/payment-notifications/{id}/read`             | `PharmacyStaff` role | Marks a notification read. |
+
+Payment status after bank transfer: `AwaitingBankTransfer` → (upload)
+`ReceiptUnderVerification` → (staff) `Paid` or `ReceiptRejected` → (upload
+again) `ReceiptUnderVerification`. While a receipt is under verification or
+paid, the payment method cannot be changed.
+
+Files are checked by extension **and** content (JPEG/PNG signature), so a
+renamed PDF is refused. They are stored under `ReceiptStorage:UploadPath`
+(default `uploads/receipts`, outside `wwwroot`) and only served to staff.
+
+Upload errors: `400` no file, unsupported format or over 5 MB; `404` order not
+found or not the patient's; `422` the receipt cannot be associated with the
+order (bank transfer not chosen, order rejected/collected, or the order total
+changed); `409` a receipt is already under verification or verified; `503`
+storing failed or the order could not be loaded (nothing is saved, so the
+patient can retry).
+
+**Kafka** follows the pharmacy-order service's outbox pattern. The receipt,
+the payment status and an `EventOutboxEntries` row are written in one save.
+`OutboxPublisherService` publishes pending rows to
+`carenova.payment.events.v1` every 5 s, retrying up to
+`Kafka:PublishRetryLimit` times and recording `LastError`. A publish failure
+never changes the payment: it stays `ReceiptUnderVerification` and the staff
+list shows the event as `Failed`. `KafkaConsumerService` (the verification
+process) reads `BankReceiptUploaded` events and creates a
+`PaymentStaffNotifications` row. Events: `BankReceiptUploaded`,
+`BankReceiptVerified`, `BankReceiptRejected`. Each carries the order id and
+number, amount, patient id, customer name (from the JWT `name` claim) and a
+message. Locally, start the broker with the pharmacy-order service's
+`docker-compose.kafka.yml` (`localhost:9092`).
+
 Configuration:
 
 | Key                                    | Meaning                                                                 |
@@ -198,3 +244,7 @@ in-memory database and exercises search, fee and availability end to end;
 `Integration/HealthEndpointTests` is the scaffold smoke test.
 `Unit/MedicinePaymentTests` covers choosing a payment method (each method,
 unavailable methods, invalid orders, order-service failures).
+`Unit/BankTransferReceiptTests` covers GCN-40: valid uploads, file format,
+content and size checks, missing files, storage failures, association
+failures, the Kafka event and notification, verification, rejection and
+Kafka publish failures.

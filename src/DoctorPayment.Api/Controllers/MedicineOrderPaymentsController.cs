@@ -20,11 +20,16 @@ namespace DoctorPayment.Api.Controllers;
 public class MedicineOrderPaymentsController : ControllerBase
 {
     private readonly IMedicinePaymentService _paymentService;
+    private readonly IBankTransferReceiptService _receiptService;
     private readonly IValidator<SelectPaymentMethodRequestDto> _validator;
 
-    public MedicineOrderPaymentsController(IMedicinePaymentService paymentService, IValidator<SelectPaymentMethodRequestDto> validator)
+    public MedicineOrderPaymentsController(
+        IMedicinePaymentService paymentService,
+        IBankTransferReceiptService receiptService,
+        IValidator<SelectPaymentMethodRequestDto> validator)
     {
         _paymentService = paymentService;
+        _receiptService = receiptService;
         _validator = validator;
     }
 
@@ -66,6 +71,16 @@ public class MedicineOrderPaymentsController : ControllerBase
         return await Execute(patientId => _paymentService.SelectAsync(patientId, orderId, request, AuthorizationHeader(), cancellationToken));
     }
 
+    /// <summary>
+    /// Uploads the bank transfer receipt (JPG, JPEG or PNG up to 5 MB, form field "file"). The order stays Pending; the
+    /// receipt is sent to the pharmacy for verification. The request limit is above 5 MB so an oversized file gets our message.
+    /// </summary>
+    [HttpPost("payment/receipt")]
+    [RequestSizeLimit(12 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 12 * 1024 * 1024)]
+    public Task<ActionResult<BankTransferReceiptUploadResultDto>> UploadReceipt(int orderId, IFormFile? file, CancellationToken cancellationToken) =>
+        Execute(patientId => _receiptService.UploadAsync(patientId, User.FindFirstValue(ClaimTypes.Name), orderId, file, AuthorizationHeader(), cancellationToken));
+
     private async Task<ActionResult<T>> Execute<T>(Func<Guid, Task<T>> action)
     {
         if (!TryGetPatientId(out var patientId)) return Unauthorized(new { message = "Please sign in again." });
@@ -77,6 +92,12 @@ public class MedicineOrderPaymentsController : ControllerBase
         catch (ArgumentException exception) { return BadRequest(new { message = exception.Message }); }
         catch (KeyNotFoundException exception) { return NotFound(new { message = exception.Message }); }
         catch (InvalidMedicineOrderException exception) { return UnprocessableEntity(new { message = exception.Message }); }
+        catch (ReceiptAssociationException exception) { return UnprocessableEntity(new { message = exception.Message }); }
+        catch (ReceiptReviewConflictException exception) { return Conflict(new { message = exception.Message }); }
+        catch (ReceiptUploadFailedException exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = exception.Message });
+        }
         catch (PaymentMethodUnavailableException exception) { return Conflict(new { message = exception.Message }); }
         catch (MedicinePaymentConflictException exception) { return Conflict(new { message = exception.Message }); }
         catch (OrderServiceUnavailableException exception)

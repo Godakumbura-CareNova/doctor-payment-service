@@ -11,7 +11,7 @@ public class MedicinePaymentRepository : IMedicinePaymentRepository
     public MedicinePaymentRepository(AppDbContext dbContext) => _dbContext = dbContext;
 
     public Task<MedicinePayment?> GetForOrderAsync(Guid patientId, int orderId, CancellationToken cancellationToken = default) =>
-        _dbContext.MedicinePayments.SingleOrDefaultAsync(payment => payment.OrderId == orderId && payment.PatientId == patientId, cancellationToken);
+        _dbContext.MedicinePayments.Include(payment => payment.Receipts).SingleOrDefaultAsync(payment => payment.OrderId == orderId && payment.PatientId == patientId, cancellationToken);
 
     public void Add(MedicinePayment payment) => _dbContext.MedicinePayments.Add(payment);
 

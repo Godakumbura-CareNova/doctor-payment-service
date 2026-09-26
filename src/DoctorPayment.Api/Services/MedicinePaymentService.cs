@@ -64,7 +64,7 @@ public class MedicinePaymentService : IMedicinePaymentService
             OrderNumber = order.OrderNumber!,
             Amount = order.TotalAmount,
             Methods = GetMethods(order.TotalAmount),
-            SelectedPayment = selected is null ? null : ToResponse(selected)
+            SelectedPayment = selected is null ? null : ToResponse(selected, _settings)
         };
     }
 
@@ -96,6 +96,15 @@ public class MedicinePaymentService : IMedicinePaymentService
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var payment = await _repository.GetForOrderAsync(patientId, orderId, cancellationToken);
+        if (payment?.Status == MedicinePaymentStatus.ReceiptUnderVerification)
+        {
+            throw new MedicinePaymentConflictException("Your bank transfer receipt is being verified, so the payment method cannot be changed.");
+        }
+        if (payment?.Status == MedicinePaymentStatus.Paid)
+        {
+            throw new MedicinePaymentConflictException("This order has already been paid, so the payment method cannot be changed.");
+        }
+
         if (payment is null)
         {
             payment = new MedicinePayment { OrderId = orderId, PatientId = patientId, CreatedAtUtc = now };
@@ -123,13 +132,13 @@ public class MedicinePaymentService : IMedicinePaymentService
             throw new MedicinePaymentConflictException("Your payment method was just changed somewhere else. Refresh and choose again.");
         }
 
-        return ToResponse(payment);
+        return ToResponse(payment, _settings);
     }
 
     public async Task<MedicinePaymentResponseDto?> GetSelectedAsync(Guid patientId, int orderId, CancellationToken cancellationToken = default)
     {
         var payment = await _repository.GetForOrderAsync(patientId, orderId, cancellationToken);
-        return payment is null ? null : ToResponse(payment);
+        return payment is null ? null : ToResponse(payment, _settings);
     }
 
     private async Task<PharmacyOrderSnapshot> LoadPayableOrderAsync(int orderId, string? authorizationHeader, CancellationToken cancellationToken)
@@ -183,7 +192,8 @@ public class MedicinePaymentService : IMedicinePaymentService
         return null;
     }
 
-    private MedicinePaymentResponseDto ToResponse(MedicinePayment payment) => new()
+    /// <summary>The payment as the patient sees it, with the bank account for a bank transfer and the latest receipt.</summary>
+    public static MedicinePaymentResponseDto ToResponse(MedicinePayment payment, MedicinePaymentSettings settings) => new()
     {
         Id = payment.Id,
         OrderId = payment.OrderId,
@@ -200,15 +210,31 @@ public class MedicinePaymentService : IMedicinePaymentService
         BankTransfer = payment.Method == PaymentMethod.BankTransfer
             ? new BankTransferInstructionsDto
             {
-                BankName = _settings.BankTransfer.BankName,
-                Branch = _settings.BankTransfer.Branch,
-                AccountName = _settings.BankTransfer.AccountName,
-                AccountNumber = _settings.BankTransfer.AccountNumber,
+                BankName = settings.BankTransfer.BankName,
+                Branch = settings.BankTransfer.Branch,
+                AccountName = settings.BankTransfer.AccountName,
+                AccountNumber = settings.BankTransfer.AccountNumber,
                 Reference = payment.OrderNumber,
                 Amount = payment.Amount
             }
             : null,
+        Receipt = payment.Method == PaymentMethod.BankTransfer
+            ? payment.Receipts.OrderByDescending(receipt => receipt.UploadedAtUtc).ThenByDescending(receipt => receipt.Id)
+                .Select(ToReceiptDto).FirstOrDefault()
+            : null,
         UpdatedAtUtc = DateTime.SpecifyKind(payment.UpdatedAtUtc, DateTimeKind.Utc)
+    };
+
+    public static BankTransferReceiptDto ToReceiptDto(BankTransferReceipt receipt) => new()
+    {
+        Id = receipt.Id,
+        FileName = receipt.OriginalFileName,
+        ContentType = receipt.ContentType,
+        SizeBytes = receipt.SizeBytes,
+        Status = receipt.Status.ToString(),
+        UploadedAtUtc = DateTime.SpecifyKind(receipt.UploadedAtUtc, DateTimeKind.Utc),
+        ReviewedAtUtc = receipt.ReviewedAtUtc is { } reviewed ? DateTime.SpecifyKind(reviewed, DateTimeKind.Utc) : null,
+        RejectionReason = receipt.RejectionReason
     };
 
     private static string FormatAmount(decimal amount) => $"LKR {amount.ToString("N2", CultureInfo.InvariantCulture)}";
