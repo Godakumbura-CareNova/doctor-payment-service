@@ -22,8 +22,10 @@ public interface IMedicinePaymentService
     /// Records (or changes) the method for the order and says what happens next. Same exceptions as
     /// <see cref="GetOptionsAsync"/>, plus <see cref="ArgumentException"/> for a missing or unknown method and
     /// <see cref="Exceptions.PaymentMethodUnavailableException"/> when the method is not offered for this order.
+    /// Keeps a copy of the order's medicines and the patient's name for staff.
     /// </summary>
-    Task<MedicinePaymentResponseDto> SelectAsync(Guid patientId, int orderId, SelectPaymentMethodRequestDto request, string? authorizationHeader, CancellationToken cancellationToken = default);
+    Task<MedicinePaymentResponseDto> SelectAsync(Guid patientId, int orderId, SelectPaymentMethodRequestDto request, string? authorizationHeader,
+        CancellationToken cancellationToken = default, string? customerName = null);
 
     /// <summary>The method chosen for the order, or null when none has been chosen yet.</summary>
     Task<MedicinePaymentResponseDto?> GetSelectedAsync(Guid patientId, int orderId, CancellationToken cancellationToken = default);

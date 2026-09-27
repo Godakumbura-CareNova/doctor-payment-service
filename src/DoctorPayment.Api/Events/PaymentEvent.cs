@@ -2,7 +2,10 @@ using System.Text.Json;
 
 namespace DoctorPayment.Api.Events;
 
-/// <summary>The envelope of every event on <see cref="EventTypes.PaymentTopic"/>. The aggregate is the medicine order.</summary>
+/// <summary>
+/// The envelope of every event on <see cref="EventTypes.PaymentTopic"/> and <see cref="EventTypes.OrderStatusTopic"/>.
+/// The aggregate is the medicine order.
+/// </summary>
 public sealed record PaymentEvent(
     Guid EventId,
     string EventType,
@@ -26,3 +29,16 @@ public sealed record BankReceiptEventData(
 
 /// <summary>One medicine on the order and how many were ordered, e.g. 2 x Iodex.</summary>
 public sealed record BankReceiptEventItem(string MedicineName, int Quantity);
+
+/// <summary>The data of an order status event: which order and patient, and the status before and after.</summary>
+public sealed record OrderStatusEventData(
+    int OrderId,
+    string OrderNumber,
+    int PaymentId,
+    Guid PatientId,
+    string CustomerName,
+    string PreviousStatus,
+    string NewStatus,
+    string? Reason,
+    DateTime ChangedAtUtc,
+    string Message);

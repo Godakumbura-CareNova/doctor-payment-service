@@ -429,6 +429,73 @@ namespace DoctorPayment.Api.Migrations
                     b.ToTable("EventOutboxEntries");
                 });
 
+            modelBuilder.Entity("DoctorPayment.Api.Models.MedicineOrderStatusChange", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("ChangedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<int>("MedicinePaymentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NotificationError")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("NotificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime?>("NotifiedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("MedicinePaymentId", "ChangedAtUtc");
+
+                    b.ToTable("MedicineOrderStatusChanges");
+                });
+
             modelBuilder.Entity("DoctorPayment.Api.Models.MedicinePayment", b =>
                 {
                     b.Property<int>("Id")
@@ -444,6 +511,11 @@ namespace DoctorPayment.Api.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
                     b.Property<string>("Method")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -456,6 +528,11 @@ namespace DoctorPayment.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
+
+                    b.Property<string>("OrderStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
 
                     b.Property<Guid>("PatientId")
                         .HasColumnType("char(36)");
@@ -475,7 +552,129 @@ namespace DoctorPayment.Api.Migrations
 
                     b.HasIndex("PatientId");
 
+                    b.HasIndex("Status", "UpdatedAtUtc");
+
                     b.ToTable("MedicinePayments");
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.MedicinePaymentItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("MedicineName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<int>("MedicinePaymentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MedicinePaymentId");
+
+                    b.ToTable("MedicinePaymentItems");
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.MedicinePaymentStatusChange", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("ChangedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ChangedByRole")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<int>("MedicinePaymentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MedicinePaymentId", "ChangedAtUtc");
+
+                    b.ToTable("MedicinePaymentStatusChanges");
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.PatientNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OrderStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("PatientId", "CreatedAtUtc");
+
+                    b.ToTable("PatientNotifications");
                 });
 
             modelBuilder.Entity("DoctorPayment.Api.Models.PaymentStaffNotification", b =>
@@ -603,6 +802,33 @@ namespace DoctorPayment.Api.Migrations
                     b.Navigation("DoctorProfile");
                 });
 
+            modelBuilder.Entity("DoctorPayment.Api.Models.MedicineOrderStatusChange", b =>
+                {
+                    b.HasOne("DoctorPayment.Api.Models.MedicinePayment", null)
+                        .WithMany("OrderStatusHistory")
+                        .HasForeignKey("MedicinePaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.MedicinePaymentItem", b =>
+                {
+                    b.HasOne("DoctorPayment.Api.Models.MedicinePayment", null)
+                        .WithMany("Items")
+                        .HasForeignKey("MedicinePaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.MedicinePaymentStatusChange", b =>
+                {
+                    b.HasOne("DoctorPayment.Api.Models.MedicinePayment", null)
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("MedicinePaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DoctorPayment.Api.Models.DoctorProfile", b =>
                 {
                     b.Navigation("AvailabilitySlots");
@@ -616,7 +842,13 @@ namespace DoctorPayment.Api.Migrations
 
             modelBuilder.Entity("DoctorPayment.Api.Models.MedicinePayment", b =>
                 {
+                    b.Navigation("Items");
+
+                    b.Navigation("OrderStatusHistory");
+
                     b.Navigation("Receipts");
+
+                    b.Navigation("StatusHistory");
                 });
 #pragma warning restore 612, 618
         }

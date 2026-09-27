@@ -6,7 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace DoctorPayment.Api.Services;
 
-/// <summary>The payment verification process: reads payment events and queues staff notifications for them.</summary>
+/// <summary>
+/// Reads both topics: bank receipt events (staff notifications, GCN-40) and order status events (patient notifications, GCN-43).
+/// </summary>
 public class KafkaConsumerService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
@@ -31,7 +33,7 @@ public class KafkaConsumerService : BackgroundService
             AutoOffsetReset = AutoOffsetReset.Earliest,
             EnableAutoCommit = false
         }).Build();
-        consumer.Subscribe(EventTypes.PaymentTopic);
+        consumer.Subscribe(new[] { EventTypes.PaymentTopic, EventTypes.OrderStatusTopic });
 
         while (!stoppingToken.IsCancellationRequested)
         {

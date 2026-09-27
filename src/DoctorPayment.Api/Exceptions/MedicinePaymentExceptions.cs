@@ -63,6 +63,33 @@ public sealed class ReceiptReviewConflictException : InvalidOperationException
     }
 }
 
+/// <summary>Staff asked for a status change the payment's current status does not allow. Nothing was changed.</summary>
+public sealed class InvalidPaymentStatusChangeException : InvalidOperationException
+{
+    public InvalidPaymentStatusChangeException(string message)
+        : base(message)
+    {
+    }
+}
+
+/// <summary>The requested order status change is not allowed. Nothing was changed and no event was published.</summary>
+public sealed class InvalidOrderStatusChangeException : InvalidOperationException
+{
+    public InvalidOrderStatusChangeException(string message)
+        : base(message)
+    {
+    }
+}
+
+/// <summary>The pharmacy applied the order status change, but it could not be recorded here (so no event was queued).</summary>
+public sealed class OrderStatusRecordFailedException : Exception
+{
+    public OrderStatusRecordFailedException(string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+    }
+}
+
 /// <summary>Two requests chose a method for the same order at once; the unique order index refused one of them.</summary>
 public sealed class MedicinePaymentConflictException : InvalidOperationException
 {

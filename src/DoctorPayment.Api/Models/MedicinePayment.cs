@@ -26,8 +26,11 @@ public enum MedicinePaymentStatus
     /// <summary>Staff could not match the uploaded receipt; the patient can upload another.</summary>
     ReceiptRejected,
 
-    /// <summary>Staff verified the bank transfer receipt; the payment is confirmed.</summary>
-    Paid
+    /// <summary>The payment is confirmed: a verified receipt, or staff recorded the online or cash payment.</summary>
+    Paid,
+
+    /// <summary>Staff recorded that the payment did not go through (e.g. online payment declined, cash never paid).</summary>
+    Failed
 }
 
 /// <summary>
@@ -57,6 +60,29 @@ public class MedicinePayment
 
     public DateTime UpdatedAtUtc { get; set; }
 
+    /// <summary>
+    /// The pharmacy order's status as last seen here ("Pending", "ReadyForCollection", "Collected" or "Rejected"). The
+    /// pharmacy-order service owns the order; this copy lets admins see it and is refreshed when staff open or update it.
+    /// </summary>
+    [MaxLength(30)]
+    public string OrderStatus { get; set; } = MedicineOrderStatuses.Pending;
+
+    /// <summary>Order status changes made through payment management, oldest first.</summary>
+    public List<MedicineOrderStatusChange> OrderStatusHistory { get; set; } = new();
+
+    /// <summary>The patient's name from their token when the method was chosen; empty for payments made before it was kept.</summary>
+    [MaxLength(200)]
+    public string CustomerName { get; set; } = string.Empty;
+
     /// <summary>Bank transfer receipts uploaded for this payment, oldest first.</summary>
     public List<BankTransferReceipt> Receipts { get; set; } = new();
+
+    /// <summary>
+    /// The order's medicines when the method was chosen, so staff and admins can see them without the pharmacy-order
+    /// service (which only lets the patient and pharmacy staff read orders).
+    /// </summary>
+    public List<MedicinePaymentItem> Items { get; set; } = new();
+
+    /// <summary>Every status change, oldest first, for monitoring payment activity.</summary>
+    public List<MedicinePaymentStatusChange> StatusHistory { get; set; } = new();
 }

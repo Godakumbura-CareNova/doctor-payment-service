@@ -28,6 +28,14 @@ public class AppDbContext : DbContext
 
     public DbSet<BankTransferReceipt> BankTransferReceipts { get; set; }
 
+    public DbSet<MedicinePaymentItem> MedicinePaymentItems { get; set; }
+
+    public DbSet<MedicinePaymentStatusChange> MedicinePaymentStatusChanges { get; set; }
+
+    public DbSet<MedicineOrderStatusChange> MedicineOrderStatusChanges { get; set; }
+
+    public DbSet<PatientNotification> PatientNotifications { get; set; }
+
     public DbSet<PaymentStaffNotification> PaymentStaffNotifications { get; set; }
 
     public DbSet<EventOutbox> EventOutboxEntries { get; set; }
@@ -109,6 +117,42 @@ public class AppDbContext : DbContext
                 .WithOne(receipt => receipt.MedicinePayment)
                 .HasForeignKey(receipt => receipt.MedicinePaymentId)
                 .OnDelete(DeleteBehavior.Cascade);
+            payment.HasMany(item => item.Items)
+                .WithOne()
+                .HasForeignKey(item => item.MedicinePaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            payment.HasMany(item => item.StatusHistory)
+                .WithOne()
+                .HasForeignKey(change => change.MedicinePaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            payment.HasMany(item => item.OrderStatusHistory)
+                .WithOne()
+                .HasForeignKey(change => change.MedicinePaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // The staff transaction list is filtered by status and sorted by the latest change.
+            payment.HasIndex(item => new { item.Status, item.UpdatedAtUtc });
+        });
+
+        modelBuilder.Entity<MedicinePaymentItem>().Property(item => item.UnitPrice).HasPrecision(10, 2);
+
+        modelBuilder.Entity<MedicineOrderStatusChange>(change =>
+        {
+            change.Property(item => item.NotificationStatus).HasConversion<string>().HasMaxLength(20);
+            change.HasIndex(item => item.EventId).IsUnique();
+            change.HasIndex(item => new { item.MedicinePaymentId, item.ChangedAtUtc });
+        });
+
+        modelBuilder.Entity<PatientNotification>(notification =>
+        {
+            notification.HasIndex(item => item.EventId).IsUnique();
+            notification.HasIndex(item => new { item.PatientId, item.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<MedicinePaymentStatusChange>(change =>
+        {
+            change.Property(item => item.FromStatus).HasConversion<string>().HasMaxLength(30);
+            change.Property(item => item.ToStatus).HasConversion<string>().HasMaxLength(30);
+            change.HasIndex(item => new { item.MedicinePaymentId, item.ChangedAtUtc });
         });
 
         modelBuilder.Entity<BankTransferReceipt>(receipt =>

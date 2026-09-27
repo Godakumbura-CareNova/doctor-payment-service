@@ -68,7 +68,7 @@ public class MedicineOrderPaymentsController : ControllerBase
             });
         }
 
-        return await Execute(patientId => _paymentService.SelectAsync(patientId, orderId, request, AuthorizationHeader(), cancellationToken));
+        return await Execute(patientId => _paymentService.SelectAsync(patientId, orderId, request, AuthorizationHeader(), cancellationToken, User.FindFirstValue(ClaimTypes.Name)));
     }
 
     /// <summary>

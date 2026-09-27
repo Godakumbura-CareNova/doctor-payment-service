@@ -231,6 +231,71 @@ Configuration:
 | `MedicinePayments:CashMaxAmount`       | Largest order total payable in cash (default `25000`).                   |
 | `MedicinePayments:BankTransfer:*`      | `BankName`, `Branch`, `AccountName`, `AccountNumber`. Bank transfer is shown as unavailable until these are set. Only sample values are committed (development); set the real account in Azure app settings, e.g. `MedicinePayments__BankTransfer__AccountNumber`. |
 
+### Medicine payment transactions and order statuses (GCN-43)
+
+Pharmacy staff and admins view every medicine payment and its order status
+(`PaymentViewing` policy). **Only pharmacy staff change statuses**
+(`PharmacyStaff` policy); admins get a read-only view and `403` on changes.
+Patients and doctors get `403` everywhere here.
+
+| Method | Route | Who | Description |
+| ------ | ----- | --- | ----------- |
+| GET | `/api/staff/medicine-payments?status=&method=&search=` | Staff, Admin | Newest-changed first (max 200) with counts per group. `status`: `Pending`, `Successful`, `Failed`, `Rejected` or `All`. |
+| GET | `/api/staff/medicine-payments/{paymentId}` | Staff, Admin | Payment, customer, medicines, receipts, payment and order status history, and the allowed changes (empty for admins). |
+| PUT | `/api/staff/medicine-payments/{paymentId}/status` | Staff | `{ "status": "Paid" \| "Failed", "note": "..." }` (note required for `Failed`). |
+| PUT | `/api/staff/medicine-orders/{orderId}/status` | Staff | The same order status update, addressed by pharmacy order id. The Medicine Orders page uses this; `404` with `code: "NoPaymentRecord"` when the order has no payment here, and the page then updates the pharmacy directly. |
+| PUT | `/api/staff/medicine-payments/{paymentId}/order-status` | Staff | `{ "status": "ReadyForCollection" \| "Rejected" \| "Collected", "reason": "..." }` (reason required for `Rejected`). |
+| GET | `/api/patient/notifications` | Patient | The patient's order status notifications. `PUT .../{id}/read` and `PUT .../read-all` mark them read. |
+
+Payment groups: **Pending** = `AwaitingOnlinePayment`, `AwaitingBankTransfer`,
+`PayOnCollection`, `ReceiptUnderVerification`; **Successful** = `Paid`;
+**Failed** = `Failed`; **Rejected** = `ReceiptRejected`. Staff may move online
+or cash payments awaiting payment to `Paid` or `Failed`, and bank transfers
+awaiting transfer (or with a rejected receipt) to `Failed`. A bank transfer is
+`Paid` only through receipt verification (GCN-40).
+
+**Order status rules:** `Pending` → `ReadyForCollection` or `Rejected`, and
+`ReadyForCollection` → `Collected`. In addition:
+
+- An online or bank-transfer order cannot be ready for collection until its
+  payment is `Paid`.
+- No order can be collected until its payment is `Paid` (cash is marked paid
+  at the counter first).
+
+The status is checked against the pharmacy's live status. Invalid changes
+return `422` with a message, the pharmacy is not called, and no event is
+published.
+
+**Flow:**
+
+1. doctor-payment forwards the change to the pharmacy-order service
+   (`PUT /api/staff/orders/{id}/status` with the staff token). That service
+   owns the order and restores stock on rejection.
+2. doctor-payment records a `MedicineOrderStatusChanges` row and queues a
+   `MedicineOrderStatusUpdated` event on its own topic,
+   `carenova.order-status.events.v1`. GCN-40 receipt events stay on
+   `carenova.payment.events.v1`. Both use the same outbox, publisher and
+   consumer (which subscribes to both topics). The event carries the
+   order id and number, payment id, patient id and name, previous status, new
+   status, reason and time.
+3. `KafkaConsumerService` creates the patient's `PatientNotifications` row and
+   marks the change's notification `Delivered`. An event with no patient is
+   marked `Failed` with the error.
+
+**Failures:**
+
+- A publish failure is retried up to `Kafka:PublishRetryLimit`. The detail page
+  then shows the event as `Failed` and the notification as still `Pending`, so
+  it is never treated as processed.
+- If the pharmacy is unreachable, the API returns `503` and nothing changes.
+- If the pharmacy applied the change but it could not be recorded here, the
+  API returns `500` with a message.
+
+`MedicinePayments.OrderStatus` keeps the last known order status, so admins can
+see it; it is refreshed from the pharmacy when staff open a transaction. Order
+details (`MedicinePaymentItems`, `CustomerName`) are copied when the patient
+chooses the method. Payments chosen before GCN-43 show "not recorded".
+
 ## Tests
 
 ```powershell

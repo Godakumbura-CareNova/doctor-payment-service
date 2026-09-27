@@ -97,6 +97,8 @@ builder.Services.AddHttpClient<IPharmacyOrderClient, PharmacyOrderClient>(client
 builder.Services.AddScoped<IValidator<SelectPaymentMethodRequestDto>, SelectPaymentMethodValidator>();
 builder.Services.AddScoped<IMedicinePaymentRepository, MedicinePaymentRepository>();
 builder.Services.AddScoped<IMedicinePaymentService, MedicinePaymentService>();
+builder.Services.AddScoped<IMedicinePaymentTransactionRepository, MedicinePaymentTransactionRepository>();
+builder.Services.AddScoped<IMedicinePaymentTransactionService, MedicinePaymentTransactionService>();
 
 builder.Services.AddOptions<ReceiptStorageSettings>()
     .Bind(builder.Configuration.GetSection("ReceiptStorage"));

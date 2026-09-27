@@ -86,7 +86,8 @@ public class MedicinePaymentService : IMedicinePaymentService
         }).ToList();
     }
 
-    public async Task<MedicinePaymentResponseDto> SelectAsync(Guid patientId, int orderId, SelectPaymentMethodRequestDto request, string? authorizationHeader, CancellationToken cancellationToken = default)
+    public async Task<MedicinePaymentResponseDto> SelectAsync(Guid patientId, int orderId, SelectPaymentMethodRequestDto request, string? authorizationHeader,
+        CancellationToken cancellationToken = default, string? customerName = null)
     {
         if (patientId == Guid.Empty) throw new ArgumentException("A patient identity is required.", nameof(patientId));
         if (!TryParseMethod(request.Method, out var method)) throw new ArgumentException("Select a payment method.");
@@ -105,6 +106,8 @@ public class MedicinePaymentService : IMedicinePaymentService
             throw new MedicinePaymentConflictException("This order has already been paid, so the payment method cannot be changed.");
         }
 
+        // Captured before a new row is added: EF may assign its key on Add, so the key cannot tell new from existing.
+        var previousStatus = payment?.Status;
         if (payment is null)
         {
             payment = new MedicinePayment { OrderId = orderId, PatientId = patientId, CreatedAtUtc = now };
@@ -113,6 +116,7 @@ public class MedicinePaymentService : IMedicinePaymentService
 
         payment.OrderNumber = order.OrderNumber!;
         payment.Amount = order.TotalAmount;
+        payment.OrderStatus = order.Status!;
         payment.Method = method;
         payment.Status = method switch
         {
@@ -121,6 +125,27 @@ public class MedicinePaymentService : IMedicinePaymentService
             _ => MedicinePaymentStatus.PayOnCollection
         };
         payment.UpdatedAtUtc = now;
+        if (!string.IsNullOrWhiteSpace(customerName)) payment.CustomerName = customerName.Trim()[..Math.Min(customerName.Trim().Length, 200)];
+
+        payment.Items.Clear();
+        payment.Items.AddRange(order.Items!.Select(item => new MedicinePaymentItem
+        {
+            MedicineName = string.IsNullOrWhiteSpace(item.MedicineName) ? "Medicine" : item.MedicineName.Trim(),
+            Quantity = item.Quantity,
+            UnitPrice = item.UnitPrice
+        }));
+        if (previousStatus != payment.Status)
+        {
+            payment.StatusHistory.Add(new MedicinePaymentStatusChange
+            {
+                FromStatus = previousStatus,
+                ToStatus = payment.Status,
+                ChangedBy = patientId,
+                ChangedByRole = "Patient",
+                Note = $"Chose {MethodText[method].Label.ToLowerInvariant()}.",
+                ChangedAtUtc = now
+            });
+        }
 
         try
         {

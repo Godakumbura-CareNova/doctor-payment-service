@@ -105,8 +105,10 @@ public class BankTransferReceiptService : IBankTransferReceiptService
             UploadedAtUtc = now
         };
         payment.Receipts.Add(receipt);
+        AddHistory(payment, MedicinePaymentStatus.ReceiptUnderVerification, patientId, "Patient", "Uploaded a bank transfer receipt.", now);
         payment.Status = MedicinePaymentStatus.ReceiptUnderVerification;
         payment.UpdatedAtUtc = now;
+        if (string.IsNullOrEmpty(payment.CustomerName)) payment.CustomerName = receipt.CustomerName;
         var items = (order.Items ?? new List<PharmacyOrderLine>())
             .Select(item => new BankReceiptEventItem(string.IsNullOrWhiteSpace(item.MedicineName) ? "Medicine" : item.MedicineName.Trim(), item.Quantity))
             .ToList();
@@ -234,6 +236,8 @@ public class BankTransferReceiptService : IBankTransferReceiptService
                 throw new ReceiptReviewConflictException("A receipt for this order is already being verified. Please wait for the pharmacy to review it.");
             case MedicinePaymentStatus.Paid:
                 throw new ReceiptReviewConflictException("The bank transfer for this order has already been verified.");
+            case MedicinePaymentStatus.Failed:
+                throw new ReceiptReviewConflictException("This payment was marked as failed by the pharmacy. Choose the payment method again before uploading a receipt.");
         }
 
         if (!string.Equals(order.OrderNumber, payment.OrderNumber, StringComparison.Ordinal) || Math.Abs(order.TotalAmount - payment.Amount) > 0.01m)
@@ -262,7 +266,10 @@ public class BankTransferReceiptService : IBankTransferReceiptService
         receipt.ReviewedBy = staffId;
         receipt.ReviewedAtUtc = now;
         receipt.RejectionReason = reason;
-        payment.Status = verified ? MedicinePaymentStatus.Paid : MedicinePaymentStatus.ReceiptRejected;
+        var newStatus = verified ? MedicinePaymentStatus.Paid : MedicinePaymentStatus.ReceiptRejected;
+        AddHistory(payment, newStatus, staffId, "PharmacyStaff",
+            verified ? "Verified the bank transfer receipt." : $"Rejected the bank transfer receipt: {reason}", now);
+        payment.Status = newStatus;
         payment.UpdatedAtUtc = now;
         AddEvent(verified ? EventTypes.BankReceiptVerified : EventTypes.BankReceiptRejected, payment, receipt, now,
             verified ? "Bank transfer receipt verified; the payment is confirmed." : $"Bank transfer receipt rejected: {reason}");
@@ -326,6 +333,17 @@ public class BankTransferReceiptService : IBankTransferReceiptService
             _ => "Queued"
         }
     };
+
+    private static void AddHistory(MedicinePayment payment, MedicinePaymentStatus toStatus, Guid changedBy, string role, string note, DateTime now) =>
+        payment.StatusHistory.Add(new MedicinePaymentStatusChange
+        {
+            FromStatus = payment.Status,
+            ToStatus = toStatus,
+            ChangedBy = changedBy,
+            ChangedByRole = role,
+            Note = Truncate(note, 500),
+            ChangedAtUtc = now
+        });
 
     private static string Truncate(string value, int maxLength) => value.Length <= maxLength ? value : value[..maxLength];
 }

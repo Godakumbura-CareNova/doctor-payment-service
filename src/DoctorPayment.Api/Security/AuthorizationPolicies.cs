@@ -9,6 +9,9 @@ public static class AuthorizationPolicies
     public const string Admin = "Admin";
     public const string PharmacyStaff = "PharmacyStaff";
 
+    /// <summary>Who may view medicine payment transactions and order statuses: pharmacy staff and admins. Only pharmacy staff change them.</summary>
+    public const string PaymentViewing = "PaymentViewing";
+
     public static IServiceCollection AddDoctorPaymentAuthorization(this IServiceCollection services)
     {
         services.AddAuthorization(options =>
@@ -18,6 +21,7 @@ public static class AuthorizationPolicies
             options.AddPolicy(Admin, policy => policy.RequireRole(Admin));
             // User-auth issues both spellings for existing accounts.
             options.AddPolicy(PharmacyStaff, policy => policy.RequireRole(PharmacyStaff, "Pharmacy Staff"));
+            options.AddPolicy(PaymentViewing, policy => policy.RequireRole(PharmacyStaff, "Pharmacy Staff", Admin));
         });
 
         return services;
