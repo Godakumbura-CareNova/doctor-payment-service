@@ -9,15 +9,24 @@ namespace DoctorPayment.Api.Services;
 
 /// <summary>
 /// Turns Kafka events into notifications: an uploaded bank receipt (payment topic) notifies pharmacy staff, and an order
-/// status update (order-status topic) notifies the patient. A redelivered event (same event id) does not notify twice. Other events need no notification.
+/// status update (order-status topic) notifies the patient. GCN-42: an approved or rejected bank transfer (validation
+/// topic) notifies the patient. A redelivered event (same event id) does not notify twice. Other events need no notification.
 /// </summary>
 public sealed class KafkaNotificationHandler(AppDbContext db)
 {
     public async Task HandleAsync(string topic, string json, CancellationToken ct = default)
     {
-        if (topic != EventTypes.PaymentTopic && topic != EventTypes.OrderStatusTopic) throw new JsonException("Unsupported Kafka event.");
+        if (topic != EventTypes.PaymentTopic && topic != EventTypes.OrderStatusTopic && topic != EventTypes.BankTransferValidationTopic)
+        {
+            throw new JsonException("Unsupported Kafka event.");
+        }
 
         var paymentEvent = JsonSerializer.Deserialize<PaymentEvent>(json) ?? throw new JsonException("Empty Kafka event.");
+        if (topic == EventTypes.BankTransferValidationTopic)
+        {
+            await HandleValidationResultAsync(paymentEvent, ct);
+            return;
+        }
         if (topic == EventTypes.OrderStatusTopic)
         {
             if (paymentEvent.EventType == EventTypes.MedicineOrderStatusUpdated) await NotifyPatientAsync(paymentEvent, ct);
@@ -102,4 +111,49 @@ public sealed class KafkaNotificationHandler(AppDbContext db)
         }
         await db.SaveChangesAsync(ct);
     }
+
+    /// <summary>
+    /// GCN-42: tells the patient their bank transfer was approved (the payment is confirmed) or rejected (with the reason,
+    /// so they can upload a clearer receipt).
+    /// </summary>
+    private async Task HandleValidationResultAsync(PaymentEvent validationEvent, CancellationToken ct)
+    {
+        var data = validationEvent.Data.Deserialize<BankTransferValidationEventData>()
+            ?? throw new JsonException("Bank transfer validation event has no data.");
+        var amount = $"LKR {data.Amount.ToString("N2", CultureInfo.InvariantCulture)}";
+
+        var (title, message, status) = validationEvent.EventType switch
+        {
+            EventTypes.BankTransferApproved => ("Your bank transfer was approved",
+                $"The pharmacy verified your bank transfer of {amount} for order {data.OrderNumber}. Your payment is confirmed.",
+                BankTransferNotificationStatuses.Approved),
+            EventTypes.BankTransferRejected => ("Your bank transfer was rejected",
+                $"The pharmacy could not verify your bank transfer for order {data.OrderNumber}: {data.Reason} Please upload a clear, valid receipt.",
+                BankTransferNotificationStatuses.Rejected),
+            _ => (null, null, null)
+        };
+        if (title is null || data.PatientId == Guid.Empty) return;
+        if (await db.PatientNotifications.AnyAsync(n => n.EventId == validationEvent.EventId, ct)) return;
+
+        db.PatientNotifications.Add(new PatientNotification
+        {
+            EventId = validationEvent.EventId,
+            PatientId = data.PatientId,
+            Title = title,
+            Message = Cut(message!),
+            OrderId = data.OrderId,
+            OrderStatus = status!,
+            CreatedAtUtc = validationEvent.OccurredAtUtc
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static string Cut(string message) => message.Length <= 1000 ? message : message[..997] + "...";
+}
+
+/// <summary>GCN-42: what a patient's bank transfer notification is about (kept in <see cref="PatientNotification.OrderStatus"/>).</summary>
+public static class BankTransferNotificationStatuses
+{
+    public const string Approved = "PaymentApproved";
+    public const string Rejected = "PaymentRejected";
 }

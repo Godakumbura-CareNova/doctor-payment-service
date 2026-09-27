@@ -28,6 +28,9 @@ public class BankTransferReceiptService : IBankTransferReceiptService
     public const string UploadedMessage =
         "Your receipt was uploaded and sent to the pharmacy for verification. Your order stays Pending and is not confirmed until the receipt is verified.";
     public const int MaxRejectionReasonLength = 500;
+    public const int MaxTransactionReferenceLength = 100;
+    public const string ReceiptFileUnavailableMessage =
+        "The receipt file could not be opened. It may be missing or damaged. Reject the transaction so the patient can upload the receipt again.";
 
     private static readonly byte[] JpegSignature = { 0xFF, 0xD8, 0xFF };
     private static readonly byte[] PngSignature = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
@@ -139,13 +142,85 @@ public class BankTransferReceiptService : IBankTransferReceiptService
     public async Task<List<StaffBankTransferReceiptDto>> ListAsync(BankTransferReceiptStatus? status, CancellationToken cancellationToken = default)
     {
         var receipts = await _receipts.ListAsync(status, cancellationToken);
-        var events = await _receipts.GetOutboxEntriesAsync(receipts.Select(receipt => receipt.UploadEventId).ToList(), cancellationToken);
-        var eventsById = events.ToDictionary(entry => entry.EventId);
-        return receipts.Select(receipt => ToStaffDto(receipt, eventsById.GetValueOrDefault(receipt.UploadEventId))).ToList();
+        var eventIds = receipts.Select(receipt => receipt.UploadEventId)
+            .Concat(receipts.Where(receipt => receipt.ValidationEventId.HasValue).Select(receipt => receipt.ValidationEventId!.Value))
+            .ToList();
+        var eventsById = (await _receipts.GetOutboxEntriesAsync(eventIds, cancellationToken)).ToDictionary(entry => entry.EventId);
+        var notified = await _receipts.GetNotifiedEventIdsAsync(eventIds, cancellationToken);
+        return receipts.Select(receipt => ToStaffDto(receipt, eventsById.GetValueOrDefault(receipt.UploadEventId),
+            receipt.ValidationEventId is { } validationId ? eventsById.GetValueOrDefault(validationId) : null,
+            receipt.ValidationEventId is { } id && notified.Contains(id))).ToList();
     }
 
     public Task<StaffBankTransferReceiptDto?> VerifyAsync(int receiptId, Guid staffId, CancellationToken cancellationToken = default) =>
         ReviewAsync(receiptId, staffId, verified: true, reason: null, cancellationToken);
+
+    public async Task<StaffBankTransferReceiptDto?> ApproveAsync(int receiptId, Guid staffId, ApproveBankTransferDto? details,
+        string? authorizationHeader, CancellationToken cancellationToken = default)
+    {
+        if (staffId == Guid.Empty) throw new ArgumentException("A staff identity is required.", nameof(staffId));
+        var receiptDetails = ValidateDetails(details);
+
+        var receipt = await _receipts.GetWithPaymentAsync(receiptId, cancellationToken);
+        if (receipt?.MedicinePayment is not { } payment) return null;
+        EnsurePending(receipt);
+
+        // The transaction must match the order; every difference found is reported together.
+        var mismatches = new List<string>();
+        if (receiptDetails is var (reference, amount, transferDate))
+        {
+            // Optional details read from the receipt are checked too when staff give them.
+            if (Math.Abs(amount - payment.Amount) > 0.01m)
+            {
+                mismatches.Add($"The transferred amount ({Lkr(amount)}) does not match the order total ({Lkr(payment.Amount)}).");
+            }
+            if (transferDate.Date < payment.CreatedAtUtc.Date)
+            {
+                mismatches.Add("The transfer was made before bank transfer was chosen for this order, so it does not belong to it.");
+            }
+            if (await _receipts.FindVerifiedByReferenceAsync(reference, receipt.Id, cancellationToken) is { } used)
+            {
+                var usedOrder = used.MedicinePayment?.OrderNumber ?? used.OrderId.ToString(CultureInfo.InvariantCulture);
+                mismatches.Add($"Transaction reference {reference} was already used to pay order {usedOrder}.");
+            }
+            receipt.TransactionReference = reference;
+            receipt.TransferredAmount = amount;
+            receipt.TransferDateUtc = DateTime.SpecifyKind(transferDate.Date, DateTimeKind.Utc);
+        }
+        if (mismatches.Count == 0)
+        {
+            // The pharmacy-order service owns the order: it must still be active, and its number and total must be the
+            // ones the patient paid for. A collected, rejected, removed or changed order cannot be approved.
+            var order = await _orders.GetActiveOrderAsync(payment.OrderId, authorizationHeader, cancellationToken);
+            if (order is null)
+            {
+                mismatches.Add("The order is no longer active in the pharmacy (it was collected, rejected or removed).");
+            }
+            else
+            {
+                if (!string.Equals(order.OrderNumber, payment.OrderNumber, StringComparison.Ordinal))
+                {
+                    mismatches.Add($"The pharmacy's order number ({order.OrderNumber}) does not match the payment ({payment.OrderNumber}).");
+                }
+                if (order.TotalAmount is { } total && Math.Abs(total - payment.Amount) > 0.01m)
+                {
+                    mismatches.Add($"The order total in the pharmacy ({Lkr(total)}) does not match the amount paid by bank transfer ({Lkr(payment.Amount)}).");
+                }
+                if (mismatches.Count == 0 && !string.IsNullOrEmpty(order.Status)) payment.OrderStatus = order.Status;
+            }
+        }
+
+        if (mismatches.Count > 0)
+        {
+            // A transaction that does not match its order is rejected with the reason; the patient is notified and can
+            // upload a valid receipt.
+            var reason = Truncate("The transaction does not match the order. " + string.Join(" ", mismatches), MaxRejectionReasonLength);
+            var rejected = await ReviewAsync(receiptId, staffId, verified: false, reason, cancellationToken);
+            throw new BankTransferMismatchException("Approval was prevented and the transaction was rejected. " + reason, rejected!);
+        }
+
+        return await ReviewAsync(receiptId, staffId, verified: true, reason: null, cancellationToken);
+    }
 
     public Task<StaffBankTransferReceiptDto?> RejectAsync(int receiptId, Guid staffId, string? reason, CancellationToken cancellationToken = default)
     {
@@ -159,8 +234,24 @@ public class BankTransferReceiptService : IBankTransferReceiptService
     {
         var receipt = await _receipts.GetWithPaymentAsync(receiptId, cancellationToken);
         if (receipt is null) return null;
-        var content = _storage.Open(receipt.StoredFileName);
-        return content is null ? null : new ReceiptFileResult(content, receipt.ContentType, receipt.OriginalFileName);
+
+        // GCN-42: the receipt is known but its file cannot be shown; say so instead of pretending it does not exist.
+        Stream? content;
+        try
+        {
+            content = _storage.Open(receipt.StoredFileName);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(exception, "Could not open the file of bank transfer receipt {ReceiptId}", receiptId);
+            throw new ReceiptFileUnavailableException(ReceiptFileUnavailableMessage, exception);
+        }
+        if (content is null || (content.CanSeek && content.Length == 0))
+        {
+            content?.Dispose();
+            throw new ReceiptFileUnavailableException(ReceiptFileUnavailableMessage);
+        }
+        return new ReceiptFileResult(content, receipt.ContentType, receipt.OriginalFileName);
     }
 
     public async Task<List<PaymentStaffNotificationDto>> ListNotificationsAsync(CancellationToken cancellationToken = default) =>
@@ -253,12 +344,7 @@ public class BankTransferReceiptService : IBankTransferReceiptService
 
         var receipt = await _receipts.GetWithPaymentAsync(receiptId, cancellationToken);
         if (receipt?.MedicinePayment is not { } payment) return null;
-        if (receipt.Status != BankTransferReceiptStatus.PendingVerification)
-        {
-            throw new ReceiptReviewConflictException(receipt.Status == BankTransferReceiptStatus.Verified
-                ? "This receipt has already been verified."
-                : "This receipt has already been rejected.");
-        }
+        EnsurePending(receipt);
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         receipt.Status = verified ? BankTransferReceiptStatus.Verified : BankTransferReceiptStatus.Rejected;
@@ -273,6 +359,10 @@ public class BankTransferReceiptService : IBankTransferReceiptService
         payment.UpdatedAtUtc = now;
         AddEvent(verified ? EventTypes.BankReceiptVerified : EventTypes.BankReceiptRejected, payment, receipt, now,
             verified ? "Bank transfer receipt verified; the payment is confirmed." : $"Bank transfer receipt rejected: {reason}");
+        // GCN-42: the verification result, alongside the GCN-40 event above; its consumer notifies the patient.
+        receipt.ValidationEventId = AddValidationEvent(verified ? EventTypes.BankTransferApproved : EventTypes.BankTransferRejected,
+            payment, receipt, staffId, now, reason,
+            verified ? "Bank transfer approved; the payment is confirmed." : $"Bank transfer rejected: {reason}");
 
         try
         {
@@ -284,8 +374,66 @@ public class BankTransferReceiptService : IBankTransferReceiptService
             throw new ReceiptReviewConflictException("This receipt was just changed somewhere else. Refresh and try again.");
         }
 
-        return ToStaffDto(receipt, null);
+        return ToStaffDto(receipt, null, null, false);
     }
+
+    /// <summary>
+    /// GCN-42: receipt details are optional; null when none are given. When any are given, the reference, amount and
+    /// date must all be there and sensible before they are compared with the order.
+    /// </summary>
+    private (string Reference, decimal Amount, DateTime TransferDate)? ValidateDetails(ApproveBankTransferDto? details)
+    {
+        if (details is null
+            || (string.IsNullOrWhiteSpace(details.TransactionReference) && details.TransferredAmount is null && details.TransferDate is null))
+        {
+            return null;
+        }
+
+        var reference = details.TransactionReference?.Trim().ToUpperInvariant();
+        if (string.IsNullOrEmpty(reference)) throw new ArgumentException("Enter the transaction reference shown on the receipt.");
+        if (reference.Length > MaxTransactionReferenceLength)
+        {
+            throw new ArgumentException($"Keep the transaction reference to {MaxTransactionReferenceLength} characters or fewer.");
+        }
+        if (details.TransferredAmount is not > 0m) throw new ArgumentException("Enter the transferred amount shown on the receipt.");
+        if (details.TransferDate is not { } transferDate) throw new ArgumentException("Enter the transfer date shown on the receipt.");
+        if (transferDate.Date > _timeProvider.GetUtcNow().UtcDateTime.Date) throw new ArgumentException("The transfer date cannot be in the future.");
+        return (reference, decimal.Round(details.TransferredAmount.Value, 2), transferDate);
+    }
+
+    private static void EnsurePending(BankTransferReceipt receipt)
+    {
+        if (receipt.Status != BankTransferReceiptStatus.PendingVerification)
+        {
+            throw new ReceiptReviewConflictException(receipt.Status == BankTransferReceiptStatus.Verified
+                ? "This receipt has already been verified."
+                : "This receipt has already been rejected.");
+        }
+    }
+
+    /// <summary>GCN-42: queues a validation result event (approved or rejected) in the outbox and returns its id.</summary>
+    private Guid AddValidationEvent(string eventType, MedicinePayment payment, BankTransferReceipt receipt, Guid staffId, DateTime occurredAt,
+        string? reason, string message)
+    {
+        var eventId = Guid.NewGuid();
+        var data = new BankTransferValidationEventData(receipt.Id, payment.Id, payment.OrderId, payment.OrderNumber, payment.Amount,
+            payment.PatientId, receipt.CustomerName, eventType, payment.Status.ToString(), receipt.TransactionReference,
+            receipt.TransferredAmount, reason, staffId, occurredAt, message);
+        var validationEvent = new PaymentEvent(eventId, eventType, occurredAt, payment.OrderId, "MedicineOrder",
+            JsonSerializer.SerializeToElement(data));
+        _receipts.AddOutboxEntry(new EventOutbox
+        {
+            EventId = eventId,
+            Topic = EventTypes.BankTransferValidationTopic,
+            EventType = eventType,
+            EventKey = payment.OrderId.ToString(CultureInfo.InvariantCulture),
+            OccurredAtUtc = occurredAt,
+            PayloadJson = JsonSerializer.Serialize(validationEvent)
+        });
+        return eventId;
+    }
+
+    private static string Lkr(decimal amount) => $"LKR {amount.ToString("N2", CultureInfo.InvariantCulture)}";
 
     /// <summary>Queues a payment event in the outbox, in the same save as the change, and returns its id.</summary>
     /// <remarks>Only the upload event lists the medicines: it is the one staff act on, and the order (with its items) is read then.</remarks>
@@ -309,7 +457,8 @@ public class BankTransferReceiptService : IBankTransferReceiptService
         return eventId;
     }
 
-    private StaffBankTransferReceiptDto ToStaffDto(BankTransferReceipt receipt, EventOutbox? uploadEvent) => new()
+    private StaffBankTransferReceiptDto ToStaffDto(BankTransferReceipt receipt, EventOutbox? uploadEvent, EventOutbox? validationEvent,
+        bool patientNotified) => new()
     {
         Id = receipt.Id,
         PaymentId = receipt.MedicinePaymentId,
@@ -325,13 +474,27 @@ public class BankTransferReceiptService : IBankTransferReceiptService
         UploadedAtUtc = DateTime.SpecifyKind(receipt.UploadedAtUtc, DateTimeKind.Utc),
         ReviewedAtUtc = receipt.ReviewedAtUtc is { } reviewed ? DateTime.SpecifyKind(reviewed, DateTimeKind.Utc) : null,
         RejectionReason = receipt.RejectionReason,
-        VerificationEvent = uploadEvent switch
-        {
-            null => "Queued",
-            { PublishedAtUtc: not null } => "Published",
-            { PublishAttempts: var attempts } when attempts >= _kafkaSettings.PublishRetryLimit => "Failed",
-            _ => "Queued"
-        }
+        VerificationEvent = EventState(uploadEvent),
+        OrderStatus = receipt.MedicinePayment?.OrderStatus ?? string.Empty,
+        PaymentCreatedAtUtc = DateTime.SpecifyKind(receipt.MedicinePayment?.CreatedAtUtc ?? default, DateTimeKind.Utc),
+        Items = (receipt.MedicinePayment?.Items ?? new List<MedicinePaymentItem>()).OrderBy(item => item.Id)
+            .Select(item => new MedicinePaymentItemDto
+            {
+                MedicineName = item.MedicineName, Quantity = item.Quantity, UnitPrice = item.UnitPrice, LineTotal = item.UnitPrice * item.Quantity
+            }).ToList(),
+        TransactionReference = receipt.TransactionReference,
+        TransferredAmount = receipt.TransferredAmount,
+        TransferDateUtc = receipt.TransferDateUtc is { } transferDate ? DateTime.SpecifyKind(transferDate, DateTimeKind.Utc) : null,
+        ValidationEvent = receipt.ValidationEventId is null ? null : EventState(validationEvent),
+        PatientNotified = patientNotified
+    };
+
+    private string EventState(EventOutbox? entry) => entry switch
+    {
+        null => "Queued",
+        { PublishedAtUtc: not null } => "Published",
+        { PublishAttempts: var attempts } when attempts >= _kafkaSettings.PublishRetryLimit => "Failed",
+        _ => "Queued"
     };
 
     private static void AddHistory(MedicinePayment payment, MedicinePaymentStatus toStatus, Guid changedBy, string role, string note, DateTime now) =>

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using DoctorPayment.Api.Clients;
 using DoctorPayment.Api.DTOs.MedicinePayment;
 using DoctorPayment.Api.Exceptions;
 using DoctorPayment.Api.Models;
@@ -11,7 +12,8 @@ namespace DoctorPayment.Api.Controllers;
 
 /// <summary>
 /// Pharmacy staff verify bank transfer receipts. Only a verification marks a medicine payment Paid; a rejection lets
-/// the patient upload another receipt.
+/// the patient upload another receipt. GCN-42: approval checks the transaction against the order and rejects a mismatch.
+/// Every action needs the pharmacy staff role; anyone else is denied.
 /// </summary>
 [ApiController]
 [Route("api/staff/bank-transfer-receipts")]
@@ -43,11 +45,23 @@ public class StaffBankTransferReceiptsController : ControllerBase
     [HttpGet("{receiptId:int}/file")]
     public async Task<IActionResult> GetFile(int receiptId, CancellationToken cancellationToken)
     {
-        var file = await _receiptService.OpenFileAsync(receiptId, cancellationToken);
-        return file is null
-            ? NotFound(new { message = "That receipt file could not be found." })
-            : File(file.Content, file.ContentType, file.FileName);
+        try
+        {
+            var file = await _receiptService.OpenFileAsync(receiptId, cancellationToken);
+            return file is null
+                ? NotFound(new { message = "That receipt file could not be found." })
+                : File(file.Content, file.ContentType, file.FileName);
+        }
+        catch (ReceiptFileUnavailableException exception)
+        {
+            return NotFound(new { message = exception.Message, fileUnavailable = true });
+        }
     }
+
+    /// <summary>GCN-42: approves the transaction; one that does not match its order is rejected instead (422).</summary>
+    [HttpPost("{receiptId:int}/approve")]
+    public Task<ActionResult<StaffBankTransferReceiptDto>> Approve(int receiptId, ApproveBankTransferDto request, CancellationToken cancellationToken) =>
+        Review(staffId => _receiptService.ApproveAsync(receiptId, staffId, request, Request.Headers.Authorization.ToString(), cancellationToken));
 
     [HttpPost("{receiptId:int}/verify")]
     public Task<ActionResult<StaffBankTransferReceiptDto>> Verify(int receiptId, CancellationToken cancellationToken) =>
@@ -81,5 +95,14 @@ public class StaffBankTransferReceiptsController : ControllerBase
         }
         catch (ArgumentException exception) { return BadRequest(new { message = exception.Message }); }
         catch (ReceiptReviewConflictException exception) { return Conflict(new { message = exception.Message }); }
+        catch (BankTransferMismatchException exception)
+        {
+            return UnprocessableEntity(new { message = exception.Message, rejected = true, receipt = exception.Receipt });
+        }
+        catch (OrderStatusChangeRefusedException exception) { return Conflict(new { message = exception.Message }); }
+        catch (OrderServiceUnavailableException exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = exception.Message });
+        }
     }
 }

@@ -98,3 +98,27 @@ public sealed class MedicinePaymentConflictException : InvalidOperationException
     {
     }
 }
+
+/// <summary>
+/// GCN-42: the bank transfer does not match its order (amount, date, reference or order state). Approval was prevented
+/// and the transaction was rejected with the reason; <see cref="Receipt"/> is the rejected receipt.
+/// </summary>
+public sealed class BankTransferMismatchException : InvalidOperationException
+{
+    public BankTransferMismatchException(string message, DTOs.MedicinePayment.StaffBankTransferReceiptDto receipt)
+        : base(message)
+    {
+        Receipt = receipt;
+    }
+
+    public DTOs.MedicinePayment.StaffBankTransferReceiptDto Receipt { get; }
+}
+
+/// <summary>GCN-42: the receipt exists but its file is missing or cannot be read, so it cannot be viewed.</summary>
+public sealed class ReceiptFileUnavailableException : Exception
+{
+    public ReceiptFileUnavailableException(string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+    }
+}

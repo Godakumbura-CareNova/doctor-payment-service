@@ -11,7 +11,7 @@ public record PharmacyOrderSnapshot(int Id, string? OrderNumber, string? Status,
 public record PharmacyOrderLine(string? MedicineName, int Quantity, decimal UnitPrice);
 
 /// <summary>An active order (Pending or ReadyForCollection) from the pharmacy-order service's staff list.</summary>
-public record StaffOrderSnapshot(int Id, string? OrderNumber, string? Status);
+public record StaffOrderSnapshot(int Id, string? OrderNumber, string? Status, decimal? TotalAmount = null);
 
 /// <summary>The pharmacy-order service refused a status change (not found, not allowed, or invalid); nothing changed there.</summary>
 public sealed class OrderStatusChangeRefusedException : Exception
@@ -35,6 +35,12 @@ public interface IPharmacyOrderClient
     /// token; null when it is not in the active list (collected, rejected or missing). Throws <see cref="OrderServiceUnavailableException"/>.
     /// </summary>
     Task<string?> GetActiveOrderStatusAsync(int orderId, string? authorizationHeader, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// GCN-42: the order (number, status and total) when it is still active, read with the staff member's token; null when
+    /// it is not in the active list. Throws <see cref="OrderServiceUnavailableException"/>.
+    /// </summary>
+    Task<StaffOrderSnapshot?> GetActiveOrderAsync(int orderId, string? authorizationHeader, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Asks the pharmacy-order service to change the order's status (it restores stock on rejection) and returns the new
@@ -93,6 +99,12 @@ public class PharmacyOrderClient : IPharmacyOrderClient
     {
         var orders = await SendAsync<List<StaffOrderSnapshot>>(HttpMethod.Get, "staff/orders", null, authorizationHeader, orderId, cancellationToken);
         return orders?.FirstOrDefault(order => order.Id == orderId)?.Status;
+    }
+
+    public async Task<StaffOrderSnapshot?> GetActiveOrderAsync(int orderId, string? authorizationHeader, CancellationToken cancellationToken = default)
+    {
+        var orders = await SendAsync<List<StaffOrderSnapshot>>(HttpMethod.Get, "staff/orders", null, authorizationHeader, orderId, cancellationToken);
+        return orders?.FirstOrDefault(order => order.Id == orderId);
     }
 
     public async Task<string> UpdateOrderStatusAsync(int orderId, string status, string? reason, string? authorizationHeader,

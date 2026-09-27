@@ -67,6 +67,37 @@ public class StaffBankTransferReceiptDto
 
     /// <summary>"Queued", "Published" or "Failed": whether the verification event reached Kafka.</summary>
     public string VerificationEvent { get; set; } = string.Empty;
+
+    /// <summary>GCN-42: the order's status as last seen here, e.g. "Pending".</summary>
+    public string OrderStatus { get; set; } = string.Empty;
+
+    /// <summary>GCN-42: when bank transfer was chosen; a transfer dated earlier does not belong to this order.</summary>
+    public DateTime PaymentCreatedAtUtc { get; set; }
+
+    /// <summary>GCN-42: the order's medicines, to review the payment against.</summary>
+    public List<MedicinePaymentItemDto> Items { get; set; } = new();
+
+    public string? TransactionReference { get; set; }
+
+    public decimal? TransferredAmount { get; set; }
+
+    public DateTime? TransferDateUtc { get; set; }
+
+    /// <summary>GCN-42: "Queued", "Published" or "Failed" for the approved/rejected event; null before a result.</summary>
+    public string? ValidationEvent { get; set; }
+
+    /// <summary>GCN-42: whether the patient has been notified of the result.</summary>
+    public bool PatientNotified { get; set; }
+}
+
+/// <summary>GCN-42: optional transaction details staff read from the receipt; when given, they are checked too.</summary>
+public class ApproveBankTransferDto
+{
+    public string? TransactionReference { get; set; }
+
+    public decimal? TransferredAmount { get; set; }
+
+    public DateTime? TransferDate { get; set; }
 }
 
 public class RejectBankTransferReceiptDto

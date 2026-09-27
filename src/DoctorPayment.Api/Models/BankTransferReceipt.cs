@@ -67,4 +67,17 @@ public class BankTransferReceipt
 
     [MaxLength(500)]
     public string? RejectionReason { get; set; }
+
+    /// <summary>GCN-42: the bank's transaction reference staff read from the receipt when approving it.</summary>
+    [MaxLength(100)]
+    public string? TransactionReference { get; set; }
+
+    /// <summary>GCN-42: the amount shown on the receipt, which must match the order total for approval.</summary>
+    public decimal? TransferredAmount { get; set; }
+
+    /// <summary>GCN-42: the date of the transfer shown on the receipt.</summary>
+    public DateTime? TransferDateUtc { get; set; }
+
+    /// <summary>GCN-42: the validation event (approved or rejected) that notifies the patient of the result.</summary>
+    public Guid? ValidationEventId { get; set; }
 }

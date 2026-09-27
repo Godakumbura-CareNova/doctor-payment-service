@@ -28,12 +28,25 @@ public interface IBankTransferReceiptService
     Task<StaffBankTransferReceiptDto?> VerifyAsync(int receiptId, Guid staffId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// GCN-42: approves a waiting bank transfer after checking it against the order in the pharmacy (still active, same
+    /// number and total) and, when staff give them, the receipt's reference, amount and date. Null when the receipt does
+    /// not exist; <see cref="ArgumentException"/> for incomplete or invalid details; <see cref="Exceptions.BankTransferMismatchException"/> (after rejecting it with the
+    /// reason, which notifies the patient) when the transaction does not match the order;
+    /// <see cref="Exceptions.ReceiptReviewConflictException"/> when it was already reviewed; <see cref="Exceptions.OrderServiceUnavailableException"/> when the order cannot be checked.
+    /// </summary>
+    Task<StaffBankTransferReceiptDto?> ApproveAsync(int receiptId, Guid staffId, ApproveBankTransferDto? details, string? authorizationHeader,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Rejects a waiting receipt with a reason; the patient can upload another. Same results as <see cref="VerifyAsync"/>,
     /// plus <see cref="ArgumentException"/> for a missing or too long reason.
     /// </summary>
     Task<StaffBankTransferReceiptDto?> RejectAsync(int receiptId, Guid staffId, string? reason, CancellationToken cancellationToken = default);
 
-    /// <summary>The stored receipt file, or null when the receipt or its file is missing.</summary>
+    /// <summary>
+    /// The stored receipt file, or null when the receipt does not exist. Throws
+    /// <see cref="Exceptions.ReceiptFileUnavailableException"/> when the receipt exists but its file is missing or unreadable.
+    /// </summary>
     Task<ReceiptFileResult?> OpenFileAsync(int receiptId, CancellationToken cancellationToken = default);
 
     Task<List<PaymentStaffNotificationDto>> ListNotificationsAsync(CancellationToken cancellationToken = default);

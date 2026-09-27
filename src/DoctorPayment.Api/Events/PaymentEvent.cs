@@ -42,3 +42,24 @@ public sealed record OrderStatusEventData(
     string? Reason,
     DateTime ChangedAtUtc,
     string Message);
+
+/// <summary>
+/// GCN-42: the data of a bank transfer validation event: which order and patient, the verification result and the
+/// transaction details staff recorded.
+/// </summary>
+public sealed record BankTransferValidationEventData(
+    int ReceiptId,
+    int PaymentId,
+    int OrderId,
+    string OrderNumber,
+    decimal Amount,
+    Guid PatientId,
+    string CustomerName,
+    string Result,
+    string PaymentStatus,
+    string? TransactionReference,
+    decimal? TransferredAmount,
+    string? Reason,
+    Guid ReviewedBy,
+    DateTime ReviewedAtUtc,
+    string Message);

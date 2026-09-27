@@ -7,7 +7,8 @@ using Microsoft.Extensions.Options;
 namespace DoctorPayment.Api.Services;
 
 /// <summary>
-/// Reads both topics: bank receipt events (staff notifications, GCN-40) and order status events (patient notifications, GCN-43).
+/// Reads all three topics: bank receipt events (staff notifications, GCN-40), order status events (patient notifications,
+/// GCN-43) and bank transfer validation results (patient notifications, GCN-42).
 /// </summary>
 public class KafkaConsumerService : BackgroundService
 {
@@ -33,7 +34,7 @@ public class KafkaConsumerService : BackgroundService
             AutoOffsetReset = AutoOffsetReset.Earliest,
             EnableAutoCommit = false
         }).Build();
-        consumer.Subscribe(new[] { EventTypes.PaymentTopic, EventTypes.OrderStatusTopic });
+        consumer.Subscribe(new[] { EventTypes.PaymentTopic, EventTypes.OrderStatusTopic, EventTypes.BankTransferValidationTopic });
 
         while (!stoppingToken.IsCancellationRequested)
         {

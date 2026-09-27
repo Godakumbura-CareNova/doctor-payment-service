@@ -14,6 +14,12 @@ public interface IBankTransferReceiptRepository
     /// <summary>The outbox entries for these event ids, to show whether each verification event was sent.</summary>
     Task<List<EventOutbox>> GetOutboxEntriesAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken cancellationToken = default);
 
+    /// <summary>GCN-42: which of these events have become a patient notification.</summary>
+    Task<HashSet<Guid>> GetNotifiedEventIdsAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken cancellationToken = default);
+
+    /// <summary>GCN-42: a verified receipt (other than <paramref name="excludingReceiptId"/>) with this transaction reference, or null.</summary>
+    Task<BankTransferReceipt?> FindVerifiedByReferenceAsync(string reference, int excludingReceiptId, CancellationToken cancellationToken = default);
+
     Task<List<PaymentStaffNotification>> ListNotificationsAsync(int take, CancellationToken cancellationToken = default);
 
     Task<PaymentStaffNotification?> GetNotificationAsync(int notificationId, CancellationToken cancellationToken = default);

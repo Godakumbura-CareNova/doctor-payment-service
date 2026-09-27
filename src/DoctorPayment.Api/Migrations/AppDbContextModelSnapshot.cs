@@ -80,11 +80,24 @@ namespace DoctorPayment.Api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<string>("TransactionReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("TransferDateUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal?>("TransferredAmount")
+                        .HasColumnType("decimal(65,30)");
+
                     b.Property<Guid>("UploadEventId")
                         .HasColumnType("char(36)");
 
                     b.Property<DateTime>("UploadedAtUtc")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ValidationEventId")
+                        .HasColumnType("char(36)");
 
                     b.HasKey("Id");
 
