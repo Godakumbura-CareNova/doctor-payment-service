@@ -122,3 +122,21 @@ public sealed class ReceiptFileUnavailableException : Exception
     {
     }
 }
+
+/// <summary>GCN-41: the card payment gateway cannot be used (not configured, unreachable or failing). Nothing was charged or marked paid.</summary>
+public sealed class PaymentGatewayUnavailableException : Exception
+{
+    public PaymentGatewayUnavailableException(string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>GCN-41: a gateway webhook without a valid signature; it is ignored.</summary>
+public sealed class InvalidWebhookSignatureException : Exception
+{
+    public InvalidWebhookSignatureException(string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+    }
+}

@@ -109,6 +109,14 @@ builder.Services.AddScoped<IBankTransferReceiptRepository, BankTransferReceiptRe
 builder.Services.AddScoped<IBankTransferReceiptService, BankTransferReceiptService>();
 builder.Services.AddScoped<IKafkaEventProducer, KafkaEventProducer>();
 builder.Services.AddHostedService<OutboxPublisherService>();
+
+// GCN-41: online payments through PayHere (its sandbox while testing). The merchant secret comes from user secrets or
+// environment variables, never appsettings.
+builder.Services.AddOptions<PayHereSettings>()
+    .Bind(builder.Configuration.GetSection("PayHere"));
+builder.Services.AddSingleton<IOnlinePaymentGateway, PayHerePaymentGateway>();
+builder.Services.AddScoped<IOnlinePaymentRepository, OnlinePaymentRepository>();
+builder.Services.AddScoped<IOnlinePaymentService, OnlinePaymentService>();
 builder.Services.AddHostedService<KafkaConsumerService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>

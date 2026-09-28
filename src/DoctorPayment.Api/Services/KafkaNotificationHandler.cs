@@ -10,18 +10,25 @@ namespace DoctorPayment.Api.Services;
 /// <summary>
 /// Turns Kafka events into notifications: an uploaded bank receipt (payment topic) notifies pharmacy staff, and an order
 /// status update (order-status topic) notifies the patient. GCN-42: an approved or rejected bank transfer (validation
-/// topic) notifies the patient. A redelivered event (same event id) does not notify twice. Other events need no notification.
+/// topic) notifies the patient. GCN-41: an online payment result notifies the patient, and a successful one also tells
+/// pharmacy staff. A redelivered event (same event id) does not notify twice. Other events need no notification.
 /// </summary>
 public sealed class KafkaNotificationHandler(AppDbContext db)
 {
     public async Task HandleAsync(string topic, string json, CancellationToken ct = default)
     {
-        if (topic != EventTypes.PaymentTopic && topic != EventTypes.OrderStatusTopic && topic != EventTypes.BankTransferValidationTopic)
+        if (topic != EventTypes.PaymentTopic && topic != EventTypes.OrderStatusTopic && topic != EventTypes.BankTransferValidationTopic
+            && topic != EventTypes.OnlinePaymentTopic)
         {
             throw new JsonException("Unsupported Kafka event.");
         }
 
         var paymentEvent = JsonSerializer.Deserialize<PaymentEvent>(json) ?? throw new JsonException("Empty Kafka event.");
+        if (topic == EventTypes.OnlinePaymentTopic)
+        {
+            await HandleOnlinePaymentResultAsync(paymentEvent, ct);
+            return;
+        }
         if (topic == EventTypes.BankTransferValidationTopic)
         {
             await HandleValidationResultAsync(paymentEvent, ct);
@@ -148,6 +155,51 @@ public sealed class KafkaNotificationHandler(AppDbContext db)
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// GCN-41: tells the patient whether their online payment went through (a failed one says why and whether they can
+    /// try again); a successful one also tells pharmacy staff the order is paid. Sandbox payments say so.
+    /// </summary>
+    private async Task HandleOnlinePaymentResultAsync(PaymentEvent paymentEvent, CancellationToken ct)
+    {
+        if (paymentEvent.EventType is not (EventTypes.OnlinePaymentSucceeded or EventTypes.OnlinePaymentFailed)) return;
+        var data = paymentEvent.Data.Deserialize<OnlinePaymentEventData>() ?? throw new JsonException("Online payment event has no data.");
+        var amount = $"LKR {data.Amount.ToString("N2", CultureInfo.InvariantCulture)}";
+        var test = data.IsTest ? " (sandbox test payment)" : string.Empty;
+        var succeeded = paymentEvent.EventType == EventTypes.OnlinePaymentSucceeded;
+        var customer = string.IsNullOrWhiteSpace(data.CustomerName) ? "A patient" : data.CustomerName;
+        var next = data.CanRetry ? "Your order is not paid; you can try again." : "Your order is not paid; please choose another payment method.";
+
+        if (data.PatientId != Guid.Empty && !await db.PatientNotifications.AnyAsync(n => n.EventId == paymentEvent.EventId, ct))
+        {
+            db.PatientNotifications.Add(new PatientNotification
+            {
+                EventId = paymentEvent.EventId,
+                PatientId = data.PatientId,
+                Title = succeeded ? "Your online payment was successful" : "Your online payment failed",
+                Message = Cut(succeeded
+                    ? $"We received your online payment of {amount} for order {data.OrderNumber}{test}. Your order is paid."
+                    : $"Your online payment of {amount} for order {data.OrderNumber} did not go through{test}: {data.FailureMessage} {next}"),
+                OrderId = data.OrderId,
+                OrderStatus = succeeded ? OnlinePaymentNotificationStatuses.Succeeded : OnlinePaymentNotificationStatuses.Failed,
+                CreatedAtUtc = paymentEvent.OccurredAtUtc
+            });
+        }
+        if (succeeded && !await db.PaymentStaffNotifications.AnyAsync(n => n.EventId == paymentEvent.EventId, ct))
+        {
+            db.PaymentStaffNotifications.Add(new PaymentStaffNotification
+            {
+                EventId = paymentEvent.EventId,
+                NotificationType = paymentEvent.EventType,
+                Title = "Online payment received",
+                Message = Cut($"{customer} paid {amount} online for order {data.OrderNumber}{test}. The order is paid."),
+                OrderId = data.OrderId,
+                PaymentId = data.PaymentId,
+                CreatedAtUtc = paymentEvent.OccurredAtUtc
+            });
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
     private static string Cut(string message) => message.Length <= 1000 ? message : message[..997] + "...";
 }
 
@@ -156,4 +208,11 @@ public static class BankTransferNotificationStatuses
 {
     public const string Approved = "PaymentApproved";
     public const string Rejected = "PaymentRejected";
+}
+
+/// <summary>GCN-41: what a patient's online payment notification is about (kept in <see cref="PatientNotification.OrderStatus"/>).</summary>
+public static class OnlinePaymentNotificationStatuses
+{
+    public const string Succeeded = "OnlinePaymentSucceeded";
+    public const string Failed = "OnlinePaymentFailed";
 }

@@ -40,6 +40,8 @@ public class AppDbContext : DbContext
 
     public DbSet<EventOutbox> EventOutboxEntries { get; set; }
 
+    public DbSet<OnlinePaymentAttempt> OnlinePaymentAttempts { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -162,6 +164,16 @@ public class AppDbContext : DbContext
             receipt.HasIndex(item => item.PendingPaymentId).IsUnique();
             receipt.HasIndex(item => new { item.Status, item.UploadedAtUtc });
             receipt.HasIndex(item => item.OrderId);
+        });
+
+        // GCN-41: online card payment attempts. One gateway payment per attempt, numbered per medicine payment.
+        modelBuilder.Entity<OnlinePaymentAttempt>(attempt =>
+        {
+            attempt.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
+            attempt.Property(item => item.Amount).HasPrecision(18, 2);
+            attempt.HasOne(item => item.MedicinePayment).WithMany().HasForeignKey(item => item.MedicinePaymentId).OnDelete(DeleteBehavior.Cascade);
+            attempt.HasIndex(item => item.GatewayReference).IsUnique();
+            attempt.HasIndex(item => new { item.MedicinePaymentId, item.AttemptNumber }).IsUnique();
         });
 
         modelBuilder.Entity<PaymentStaffNotification>(notification =>

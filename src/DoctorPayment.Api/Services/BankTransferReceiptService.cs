@@ -258,6 +258,7 @@ public class BankTransferReceiptService : IBankTransferReceiptService
         (await _receipts.ListNotificationsAsync(50, cancellationToken)).Select(notification => new PaymentStaffNotificationDto
         {
             Id = notification.Id,
+            NotificationType = notification.NotificationType,
             Title = notification.Title,
             Message = notification.Message,
             OrderId = notification.OrderId,

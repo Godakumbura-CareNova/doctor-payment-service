@@ -109,6 +109,9 @@ public class PaymentStaffNotificationDto
 {
     public int Id { get; set; }
 
+    /// <summary>The Kafka event it came from, e.g. "BankReceiptUploaded" or "OnlinePaymentSucceeded" (GCN-41).</summary>
+    public string NotificationType { get; set; } = string.Empty;
+
     public string Title { get; set; } = string.Empty;
 
     public string Message { get; set; } = string.Empty;

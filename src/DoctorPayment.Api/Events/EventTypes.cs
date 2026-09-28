@@ -11,6 +11,9 @@ public static class EventTypes
     /// <summary>GCN-42: the result of staff validating a bank transfer transaction (approved or rejected).</summary>
     public const string BankTransferValidationTopic = "carenova.bank-transfer-validation.events.v1";
 
+    /// <summary>GCN-41: the result of an online card payment (succeeded or failed), sandbox or live.</summary>
+    public const string OnlinePaymentTopic = "carenova.online-payment.events.v1";
+
     public const string BankReceiptUploaded = "BankReceiptUploaded";
     public const string BankReceiptVerified = "BankReceiptVerified";
     public const string BankReceiptRejected = "BankReceiptRejected";
@@ -19,4 +22,7 @@ public static class EventTypes
 
     public const string BankTransferApproved = "BankTransferApproved";
     public const string BankTransferRejected = "BankTransferRejected";
+
+    public const string OnlinePaymentSucceeded = "OnlinePaymentSucceeded";
+    public const string OnlinePaymentFailed = "OnlinePaymentFailed";
 }

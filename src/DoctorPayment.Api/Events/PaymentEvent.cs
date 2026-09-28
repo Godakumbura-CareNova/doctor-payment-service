@@ -63,3 +63,27 @@ public sealed record BankTransferValidationEventData(
     Guid ReviewedBy,
     DateTime ReviewedAtUtc,
     string Message);
+
+/// <summary>
+/// GCN-41: the data of an online payment event: which order and patient, the gateway reference, whether it ran in the
+/// sandbox, and why it failed.
+/// </summary>
+public sealed record OnlinePaymentEventData(
+    int AttemptId,
+    int PaymentId,
+    int OrderId,
+    string OrderNumber,
+    decimal Amount,
+    string Currency,
+    Guid PatientId,
+    string CustomerName,
+    int AttemptNumber,
+    string GatewayReference,
+    bool IsTest,
+    string Result,
+    string PaymentStatus,
+    string? FailureCode,
+    string? FailureMessage,
+    bool CanRetry,
+    DateTime OccurredAtUtc,
+    string Message);

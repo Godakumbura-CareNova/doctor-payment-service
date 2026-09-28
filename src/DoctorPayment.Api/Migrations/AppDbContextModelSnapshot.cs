@@ -642,6 +642,84 @@ namespace DoctorPayment.Api.Migrations
                     b.ToTable("MedicinePaymentStatusChanges");
                 });
 
+            modelBuilder.Entity("DoctorPayment.Api.Models.OnlinePaymentAttempt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("GatewayPaymentId")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("GatewayReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("MedicinePaymentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("PaymentMethod")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("ResultEventId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GatewayReference")
+                        .IsUnique();
+
+                    b.HasIndex("MedicinePaymentId", "AttemptNumber")
+                        .IsUnique();
+
+                    b.ToTable("OnlinePaymentAttempts");
+                });
+
             modelBuilder.Entity("DoctorPayment.Api.Models.PatientNotification", b =>
                 {
                     b.Property<int>("Id")
@@ -840,6 +918,17 @@ namespace DoctorPayment.Api.Migrations
                         .HasForeignKey("MedicinePaymentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("DoctorPayment.Api.Models.OnlinePaymentAttempt", b =>
+                {
+                    b.HasOne("DoctorPayment.Api.Models.MedicinePayment", "MedicinePayment")
+                        .WithMany()
+                        .HasForeignKey("MedicinePaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MedicinePayment");
                 });
 
             modelBuilder.Entity("DoctorPayment.Api.Models.DoctorProfile", b =>
