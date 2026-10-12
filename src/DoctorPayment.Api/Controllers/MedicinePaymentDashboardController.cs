@@ -10,6 +10,14 @@ namespace DoctorPayment.Api.Controllers;
 [ApiController]
 public sealed class MedicinePaymentDashboardController(MedicinePaymentDashboardService service) : ControllerBase
 {
+    [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [HttpGet("api/admin/dashboard/medicine-payments")]
+    public async Task<IActionResult> Admin(CancellationToken ct)
+    {
+        try { return Ok(await service.GetAdminAsync(ct)); }
+        catch (DbException) { return StatusCode(503, new { message = "Payment information is unavailable. Please retry." }); }
+    }
+
     [Authorize(Policy = AuthorizationPolicies.Patient)]
     [HttpGet("api/patient/dashboard/medicine-payments")]
     public async Task<IActionResult> Patient(CancellationToken ct)

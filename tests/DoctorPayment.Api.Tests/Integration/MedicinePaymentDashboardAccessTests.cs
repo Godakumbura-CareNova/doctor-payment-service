@@ -19,7 +19,7 @@ namespace DoctorPayment.Api.Tests.Integration;
 public class MedicinePaymentDashboardAccessTests
 {
     private const string Secret = "gcn51-integration-test-secret-at-least-32-characters";
-    private sealed class Factory : WebApplicationFactory<Program>
+    internal sealed class Factory : WebApplicationFactory<Program>
     {
         private readonly string name = Guid.NewGuid().ToString();
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -68,7 +68,7 @@ public class MedicinePaymentDashboardAccessTests
         Assert.Equal("OWN", Assert.Single(json.RootElement.GetProperty("recentPayments").EnumerateArray()).GetProperty("reference").GetString());
     }
 
-    private static HttpClient Client(Factory factory, string? role, Guid patient)
+    internal static HttpClient Client(Factory factory, string? role, Guid patient)
     {
         var client = factory.CreateClient();
         if (role != null)

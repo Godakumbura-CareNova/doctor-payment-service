@@ -7,6 +7,15 @@ namespace DoctorPayment.Api.Services;
 
 public sealed class MedicinePaymentDashboardService(AppDbContext db, TimeProvider clock)
 {
+    public async Task<AdminMedicinePaymentDashboardDto> GetAdminAsync(CancellationToken ct)
+    {
+        var groups = await db.MedicinePayments.AsNoTracking().GroupBy(p => p.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() }).ToListAsync(ct);
+        var summary = await GetStaffAsync(ct);
+        return new(groups.Sum(g => g.Count), groups.ToDictionary(g => g.Status.ToString(), g => g.Count),
+            summary.PendingTransfers, summary.RecentPayments, summary.Income, summary.GeneratedAtUtc);
+    }
+
     public async Task<PatientMedicinePaymentDashboard> GetPatientAsync(Guid patientId, CancellationToken ct)
     {
         var query = db.MedicinePayments.AsNoTracking().Where(p => p.PatientId == patientId);
