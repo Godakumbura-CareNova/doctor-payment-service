@@ -26,6 +26,7 @@ public class DoctorsController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous]
     public async Task<ActionResult<DoctorSearchResultDto>> Search([FromQuery] DoctorSearchQueryDto query, CancellationToken cancellationToken)
     {
         var validation = await _validator.ValidateAsync(query, cancellationToken);
@@ -42,10 +43,12 @@ public class DoctorsController : ControllerBase
     }
 
     [HttpGet("specializations")]
+    [AllowAnonymous]
     public async Task<ActionResult<List<string>>> Specializations(CancellationToken cancellationToken) =>
         Ok(await _searchService.GetSpecializationsAsync(cancellationToken));
 
     [HttpGet("{doctorId:guid}")]
+    [AllowAnonymous]
     public async Task<ActionResult<DoctorPublicProfileDto>> GetProfile(Guid doctorId, CancellationToken cancellationToken)
     {
         var profile = await _searchService.GetPublicProfileAsync(doctorId, cancellationToken);

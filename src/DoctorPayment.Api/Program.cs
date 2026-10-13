@@ -69,6 +69,7 @@ builder.Services.AddScoped<IDoctorProfileRepository, DoctorProfileRepository>();
 builder.Services.AddScoped<IDoctorProfileService, DoctorProfileService>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<MedicinePaymentDashboardService>();
 builder.Services.AddScoped<IValidator<DoctorSearchQueryDto>, DoctorSearchQueryValidator>();
 builder.Services.AddScoped<IDoctorSearchRepository, DoctorSearchRepository>();
 builder.Services.AddScoped<IDoctorSearchService, DoctorSearchService>();
