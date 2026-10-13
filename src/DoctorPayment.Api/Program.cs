@@ -16,6 +16,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,6 +70,7 @@ builder.Services.AddScoped<IDoctorProfileRepository, DoctorProfileRepository>();
 builder.Services.AddScoped<IDoctorProfileService, DoctorProfileService>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<MedicinePaymentDashboardService>();
 builder.Services.AddScoped<IValidator<DoctorSearchQueryDto>, DoctorSearchQueryValidator>();
 builder.Services.AddScoped<IDoctorSearchRepository, DoctorSearchRepository>();
 builder.Services.AddScoped<IDoctorSearchService, DoctorSearchService>();
@@ -138,8 +140,10 @@ if (app.Environment.IsDevelopment())
 app.UseCors("FrontendPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHttpMetrics();
 
 app.MapControllers();
+app.MapMetrics();
 
 app.Run();
 
