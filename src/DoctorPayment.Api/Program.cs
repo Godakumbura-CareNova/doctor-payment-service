@@ -132,8 +132,11 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 // Swagger UI is served in every environment so evaluators can use the deployed API documentation.
-app.UseSwagger();
-app.UseSwaggerUI();
+// Relative URLs let the same Swagger UI work directly and behind the gateway's /doctor-payment prefix,
+// so the definition and "Try it out" requests resolve against the address the page was opened from.
+app.UseSwagger(options => options.PreSerializeFilters.Add((document, _) =>
+    document.Servers = new List<Microsoft.OpenApi.Models.OpenApiServer> { new() { Url = "../.." } }));
+app.UseSwaggerUI(options => options.SwaggerEndpoint("v1/swagger.json", "DoctorPayment.Api v1"));
 
 app.UseCors("FrontendPolicy");
 app.UseAuthentication();
